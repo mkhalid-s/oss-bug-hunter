@@ -42,6 +42,8 @@ class RunSpec:
     name: Optional[str] = None                # handle for kill()/cancel
     env: Optional[dict] = None
     mounts: list = field(default_factory=list)  # [(host, container)] for container backends
+    container_env: dict = field(default_factory=dict)  # explicit -e VARS for containers only;
+    # an ALLOWLIST (e.g. CARGO_HOME=/work/...), NOT host os.environ — never leaks GH_TOKEN/creds.
     image: Optional[str] = None               # container backends only
     # local backend: True means argv already avoids network (offline) so network=none
     # is satisfiable without kernel isolation.
@@ -139,6 +141,8 @@ class _ContainerBackend(ExecBackend):
         argv += self.extra_run
         for host, cont in spec.mounts:
             argv += ["-v", f"{_host_bind(host)}:{cont}:rw"]
+        for k, v in (spec.container_env or {}).items():
+            argv += ["-e", f"{k}={v}"]        # cache-redirect vars (worktree-local), not host env
         argv += ["-w", spec.cwd, spec.image]
         argv += list(spec.argv)
         return self._spawn(argv, None, None, log, on_start)

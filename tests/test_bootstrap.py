@@ -2,6 +2,7 @@
 real uv/go/cargo/npm), so this tests the idempotency/marker/failure logic + the
 run_harness DEP_ERROR seam."""
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -10,6 +11,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import bootstrap as bs   # noqa: E402
 import adapters as ad    # noqa: E402
 import run_harness as rh  # noqa: E402
+import exec_backend as eb  # noqa: E402
 
 PY = ad.get_adapter("python")
 
@@ -94,11 +96,22 @@ def test_maybe_bootstrap_trust_gate_and_errors(tmp_path, monkeypatch):
     # #62: container (untrusted) + python (in-worktree) → IN-CONTAINER bootstrap (run_step set)
     assert rh._maybe_bootstrap(PY, wt, container, log=lambda *a: None) is None
     assert cap["run_step"] is not None        # ran in the container, not on the host
-    # cache-based lang (go) + container → FAIL CLOSED (caches don't survive between containers)
+    # #63: cache-based lang (go) + container → NOW in-container bootstrap (GOMODCACHE/GOCACHE
+    # redirected under /work by container_cache_env), so run_step is set — no longer fail-closed.
     go = ad.get_adapter("go")
     (tmp_path / "go.mod").write_text("module x\n")
-    v = rh._maybe_bootstrap(go, str(tmp_path), container, log=lambda *a: None)
-    assert v is not None and v.outcome is rh.Outcome.DEP_ERROR and "cache" in v.raw_summary
+    cap["run_step"] = None
+    assert rh._maybe_bootstrap(go, str(tmp_path), container, log=lambda *a: None) is None
+    assert cap["run_step"] is not None
+    # the fail-closed else now requires an adapter that keeps deps OUTSIDE the worktree:
+    class _NoWt:
+        language = "exotic"
+        MANIFESTS = ("exotic.toml",)
+        def bootstrap_steps(self, wt): return [["true"]] if (Path(wt) / "exotic.toml").exists() else []
+        def container_cache_env(self, work): return {}
+    (tmp_path / "exotic.toml").write_text("x\n")
+    v = rh._maybe_bootstrap(_NoWt(), str(tmp_path), container, log=lambda *a: None)
+    assert v is not None and v.outcome is rh.Outcome.DEP_ERROR and "outside the worktree" in v.raw_summary
     # local + bootstrap ok:False → DEP_ERROR; raise → DEP_ERROR (P2)
     monkeypatch.setattr(bs, "bootstrap", lambda *a, **k: {"ok": False, "step": ["uv", "x"]})
     assert rh._maybe_bootstrap(PY, wt, local, log=lambda *a: None).outcome is rh.Outcome.DEP_ERROR
@@ -127,3 +140,98 @@ def test_lockfiles_in_manifest_hash(tmp_path):
     h1 = bs._manifest_hash(str(tmp_path), go)
     (tmp_path / "go.sum").write_text("h1:abc=\n")          # a lockfile-only change
     assert bs._manifest_hash(str(tmp_path), go) != h1      # go.sum now invalidates the cache
+
+
+# ---- #63: worktree-local go/rust cache redirection -------------------------------------
+
+def test_container_cache_env_per_lang():
+    # python/js keep deps in the worktree (venv path / node_modules) → no env needed.
+    assert ad.get_adapter("python").container_cache_env("/work") == {}
+    assert ad.get_adapter("javascript").container_cache_env("/work") == {}
+    # go/rust redirect their caches under /work so they survive bootstrap-container → test-container.
+    go = ad.get_adapter("go").container_cache_env("/work")
+    assert go == {"GOMODCACHE": "/work/.oss-go/mod", "GOCACHE": "/work/.oss-go/build"}
+    assert ad.get_adapter("rust").container_cache_env("/work") == {"CARGO_HOME": "/work/.oss-cargo"}
+
+
+def test_container_backend_emits_only_allowlisted_env(tmp_path):
+    """RunSpec.container_env → -e flags (the cache allowlist), NOT host os.environ — so a
+    secret like GH_TOKEN in the harness env can never leak into the untrusted container."""
+    cap = {}
+
+    class _Cap(eb._ContainerBackend):
+        cli = "docker"
+        def _spawn(self, argv, cwd, env, log, on_start):
+            cap["argv"] = list(argv)
+            return 0
+
+    spec = eb.RunSpec(argv=["cargo", "test"], cwd="/work", network="bridge", image="img",
+                      mounts=[(str(tmp_path), "/work")],
+                      container_env={"CARGO_HOME": "/work/.oss-cargo"})
+    assert _Cap().run(spec) == 0
+    a = cap["argv"]
+    assert a.count("-e") == 1 and "CARGO_HOME=/work/.oss-cargo" in a   # exactly the allowlist
+    assert "-v" in a and any(s.endswith(":/work:rw") for s in a)       # worktree mount
+    assert a[a.index("img") + 1:] == ["cargo", "test"]                 # image, then argv
+
+
+def test_js_bootstrap_steps_per_lockfile(tmp_path):
+    js = ad.get_adapter("javascript")
+    (tmp_path / "package.json").write_text("{}")
+    assert js.bootstrap_steps(str(tmp_path)) == [["npm", "install"]]
+    (tmp_path / "package-lock.json").write_text("{}")
+    assert js.bootstrap_steps(str(tmp_path)) == [["npm", "ci"]]
+    (tmp_path / "yarn.lock").write_text("")
+    assert js.bootstrap_steps(str(tmp_path))[0][:2] == ["corepack", "yarn"]   # yarn beats npm-lock
+    (tmp_path / "pnpm-lock.yaml").write_text("")
+    s = js.bootstrap_steps(str(tmp_path))[0]
+    assert s[:2] == ["corepack", "pnpm"] and "--frozen-lockfile" in s          # pnpm wins
+
+
+# ---- #63: pristine() refuses to nuke an uncommitted manifest (review P1) ----------------
+
+def _git(wt, *args):
+    # -c overrides (highest precedence): a fixed identity + no signing, so these throwaway
+    # repos don't inherit the host's enterprise gpgsign=true (no key in the devcontainer).
+    subprocess.run(["git", "-C", str(wt), "-c", "user.email=t@t.dev", "-c", "user.name=t",
+                    "-c", "commit.gpgsign=false", "-c", "tag.gpgsign=false", *args],
+                   check=True, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+
+def test_pristine_guard_nonrepo_committed_and_untracked_manifest(tmp_path):
+    # (a) non-repo → clear error, deletes nothing.
+    plain = tmp_path / "plain"; plain.mkdir()
+    (plain / "junk.txt").write_text("x")
+    err = rh.pristine(str(plain))
+    assert err and "not a git work tree" in err and (plain / "junk.txt").exists()
+
+    # (b) repo with a COMMITTED manifest + untracked junk → cleans junk, keeps manifest, None.
+    repo = tmp_path / "repo"; repo.mkdir()
+    _git(repo, "init", "-q")
+    (repo / "pyproject.toml").write_text("[project]\nname='x'\n")
+    (repo / "app.py").write_text("x = 1\n")
+    _git(repo, "add", "-A"); _git(repo, "commit", "-qm", "init")
+    (repo / "untracked_junk.py").write_text("junk\n")
+    assert rh.pristine(str(repo)) is None
+    assert not (repo / "untracked_junk.py").exists()       # untracked non-manifest cleaned
+    assert (repo / "pyproject.toml").exists()              # committed manifest preserved
+
+    # (c) an UNTRACKED manifest would be deleted by clean → refuse, and don't delete it.
+    (repo / "setup.cfg").write_text("[metadata]\n")
+    err2 = rh.pristine(str(repo))
+    assert err2 and "uncommitted manifest" in err2 and "setup.cfg" in err2
+    assert (repo / "setup.cfg").exists()                   # guard fired BEFORE any clean
+
+
+def test_pristine_preserves_oss_caches(tmp_path):
+    """The worktree-local caches (.oss-venv/.oss-go/.oss-cargo/node_modules) survive a reset
+    so bootstrap stays idempotent across attempts."""
+    repo = tmp_path / "r"; repo.mkdir()
+    _git(repo, "init", "-q")
+    (repo / "go.mod").write_text("module x\n")
+    _git(repo, "add", "-A"); _git(repo, "commit", "-qm", "init")
+    for d in (".oss-go", ".oss-cargo", ".oss-venv", "node_modules"):
+        (repo / d).mkdir(); (repo / d / "marker").write_text("cached\n")
+    assert rh.pristine(str(repo)) is None
+    for d in (".oss-go", ".oss-cargo", ".oss-venv", "node_modules"):
+        assert (repo / d / "marker").exists()              # cache NOT cleaned

@@ -1011,6 +1011,40 @@ whole container path, §11.17). #49 re-verified locally with the relative paths.
 tests.** With this, untrusted targets never run installs on the host: Python/JS hunt in a
 container; go/rust are safely refused pending the cache mount.
 
+### 11.30 #63 — go/rust shared dep-cache, yarn/pnpm, pristine guard (2026-06-09)
+The #62 residual. Untrusted go/rust no longer fail closed at bootstrap.
+
+**Cache redirected into the worktree.** go/rust caches normally live outside the tree
+(`~/go`, `~/.cargo`), so they would not survive between the bootstrap container and the
+test container. Rather than mount the host cache (a poisoning risk) we point the caches
+INTO the worktree — `GOMODCACHE`/`GOCACHE` → `/work/.oss-go/{mod,build}`, `CARGO_HOME` →
+`/work/.oss-cargo` — via a new `adapter.container_cache_env(work)`. Both the bootstrap and
+test containers mount the same worktree at `/work`, so the populated cache is shared for
+free; it is per-target, gitignored, and pristine-preserved. go/rust thus join Python/JS as
+`bootstrap_in_worktree=True`; the fail-closed branch now only guards a hypothetical adapter
+that keeps its deps elsewhere.
+
+**Allowlisted container env.** The cache vars reach the container through a new
+`RunSpec.container_env` → `-e KEY=VALUE` allowlist, kept strictly separate from `env` (the
+local subprocess env). The container never receives host `os.environ`, so a secret like
+`GH_TOKEN` in the harness env cannot leak into untrusted code.
+
+**yarn/pnpm.** JS `bootstrap_steps` matches the lockfile to its package manager —
+`corepack pnpm|yarn` (corepack ships with node ≥16.10) for pnpm-lock/yarn.lock, else
+`npm ci`/`npm install`.
+
+**pristine guard (review P1).** `pristine()` now refuses — returning a TOOL_ERROR string
+instead of running `git reset`/`clean` — when the worktree is not a git work tree, or when
+a `clean` dry-run shows it would delete an untracked SOURCE-OF-TRUTH manifest
+(Cargo.toml/go.mod/pyproject.toml/package.json/...). Derived lockfiles (Cargo.lock, go.sum,
+`*-lock.*`) are still cleaned — bootstrap regenerates them — and the `.oss-*` caches are
+preserved. This stops the engine silently nuking a target's manifest and then bootstrapping
+as if there were none. (It immediately caught the rustbug-demo case: Cargo.toml committed,
+Cargo.lock untracked → the guard correctly ignores the lockfile.)
+
+Unit-tested incl. the `-e` allowlist emission and the guard against a real git repo; the
+real in-container go/rust run remains host-only (no Docker daemon here, §11.17). **302 tests.**
+
 ---
 
 ## 12. Autonomy roadmap — toward unattended OSS bug-hunting (PROPOSED)

@@ -110,6 +110,9 @@ class PythonPytestAdapter:
         return [py, "-m", "pytest", selector, "-q",
                 "-p", "no:cacheprovider", "--no-header"]
 
+    def container_cache_env(self, work: str) -> dict:
+        return {}     # the in-worktree .oss-venv is found via its python path; no env needed
+
     def parse_result(self, output: str):
         # Parse ONLY pytest's summary line (the last line that carries a count),
         # so a stray "3 errors" printed by a test/library can't flip the verdict.
@@ -142,14 +145,23 @@ class GoTestAdapter:
     language = "go"
     # a fix may edit any .go file, but never the module manifest or CI config.
     patch_allowed = [re.compile(r"\.go$")]
-    patch_denied = [re.compile(r"(^|/)(go\.mod|go\.sum|\.github/)")]
+    patch_denied = [re.compile(r"(^|/)(go\.mod|go\.sum|\.github/|\.oss-go/|\.oss-bootstrap\.json)")]
     _TESTFUNC = re.compile(r"func\s+(Test[A-Za-z0-9_]*)\s*\(")
     image = "oss-bug-hunter-go:latest"
     image_dir = str(_ROOT / "tool" / "repro-go")
     MANIFESTS = ("go.mod", "go.sum")
+    CACHE_DIR = ".oss-go"          # module+build cache, redirected into the worktree (#63)
+    bootstrap_in_worktree = True   # /work/.oss-go shared bootstrap↔test container (no host ~/go)
 
     def bootstrap_steps(self, worktree) -> list:
         return [["go", "mod", "download"]] if (Path(worktree) / "go.mod").exists() else []
+
+    def container_cache_env(self, work: str) -> dict:
+        # redirect GOMODCACHE/GOCACHE under the /work mount so `go mod download` (bootstrap
+        # container) and `go test` (test container) share one cache, isolated from the host's
+        # ~/go. Absolute in-container paths — go rejects a relative GOMODCACHE.
+        base = f"{work}/{self.CACHE_DIR}"
+        return {"GOMODCACHE": f"{base}/mod", "GOCACHE": f"{base}/build"}
 
     def place_reproducer(self, worktree: str, test_src: str, name: str) -> str:
         body = Path(test_src).read_text()
@@ -189,13 +201,20 @@ class RustCargoAdapter:
     language = "rust"
     # a fix may edit any .rs; never the manifest/lockfile or CI config.
     patch_allowed = [re.compile(r"\.rs$")]
-    patch_denied = [re.compile(r"(^|/)(Cargo\.toml|Cargo\.lock|\.github/)")]
+    patch_denied = [re.compile(r"(^|/)(Cargo\.toml|Cargo\.lock|\.github/|\.oss-cargo/|\.oss-bootstrap\.json)")]
     image = "oss-bug-hunter-rust:latest"
     image_dir = str(_ROOT / "tool" / "repro-rust")
     MANIFESTS = ("Cargo.toml", "Cargo.lock")
+    CACHE_DIR = ".oss-cargo"       # CARGO_HOME, redirected into the worktree (#63)
+    bootstrap_in_worktree = True   # /work/.oss-cargo shared bootstrap↔test container (no host ~/.cargo)
 
     def bootstrap_steps(self, worktree) -> list:
         return [["cargo", "fetch"]] if (Path(worktree) / "Cargo.toml").exists() else []
+
+    def container_cache_env(self, work: str) -> dict:
+        # CARGO_HOME under /work so `cargo fetch` (bootstrap) and `cargo test` (test) share the
+        # registry cache across containers, isolated from the host's ~/.cargo.
+        return {"CARGO_HOME": f"{work}/{self.CACHE_DIR}"}
 
     def place_reproducer(self, worktree: str, test_src: str, name: str) -> str:
         # integration test: tests/<stem>.rs (a separate crate using the public API).
@@ -241,7 +260,14 @@ class JsNodeTestAdapter:
     bootstrap_in_worktree = True   # node_modules lives in the worktree → shareable via /work (node auto-resolves it) (#62)
 
     def bootstrap_steps(self, worktree) -> list:
+        # match the lockfile to its package manager. corepack ships with node ≥16.10, so
+        # `corepack yarn|pnpm` runs in the image and on a modern host with no global install.
+        # Order: pnpm > yarn > npm-lock > bare package.json.
         wt = Path(worktree)
+        if (wt / "pnpm-lock.yaml").exists():
+            return [["corepack", "pnpm", "install", "--frozen-lockfile"]]
+        if (wt / "yarn.lock").exists():
+            return [["corepack", "yarn", "install"]]   # frozen flag differs v1/berry → omit
         if (wt / "package-lock.json").exists():
             return [["npm", "ci"]]
         return [["npm", "install"]] if (wt / "package.json").exists() else []
@@ -257,6 +283,9 @@ class JsNodeTestAdapter:
 
     def container_argv(self, selector: str, worktree=None) -> list:   # node is on PATH in the image
         return self.test_argv(selector, worktree)
+
+    def container_cache_env(self, work: str) -> dict:
+        return {}     # node_modules lives in the worktree (/work); node auto-resolves it
 
     def parse_result(self, output: str):
         def n(label: str) -> int:
@@ -281,3 +310,21 @@ _ADAPTERS = {"python": PythonPytestAdapter(), "go": GoTestAdapter(),
 
 def get_adapter(language: str):
     return _ADAPTERS.get(language)
+
+
+def all_manifests() -> set:
+    """Every manifest filename across all adapters."""
+    return {m for ad in _ADAPTERS.values() for m in getattr(ad, "MANIFESTS", ())}
+
+
+# lockfiles are DERIVED (bootstrap regenerates them: cargo fetch / go mod / npm ci), so it is
+# safe for pristine() to clean an untracked one — that was always the behaviour. Only the
+# source-of-truth manifests below must survive a reset; those are what pristine() refuses to
+# delete (#63 / review P1), since losing one makes bootstrap behave as if there were no manifest.
+_LOCKFILES = frozenset({"poetry.lock", "Pipfile.lock", "go.sum", "Cargo.lock",
+                        "package-lock.json", "yarn.lock", "pnpm-lock.yaml"})
+
+
+def primary_manifests() -> set:
+    """Source-of-truth manifests (excludes derived lockfiles) — the set pristine() guards."""
+    return all_manifests() - _LOCKFILES

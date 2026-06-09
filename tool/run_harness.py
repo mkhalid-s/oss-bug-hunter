@@ -83,14 +83,39 @@ def worktree_lock(worktree: str, timeout_warn: bool = True):
         os.close(fd)
 
 
-def pristine(worktree: str) -> None:
-    """Reset tracked files + remove untracked (preserving .m2). Fail-open."""
+# preserved across a reset: dependency caches (host .m2 + the per-target worktree caches
+# from M5/#62/#63) and the worktree lock. Shared by the real clean and the dry-run guard.
+_CLEAN_KEEP = (".m2", ".repro-worktree.lock", ".oss-venv", ".oss-bootstrap.json",
+               "node_modules", ".oss-go", ".oss-cargo")
+
+
+def pristine(worktree: str) -> str | None:
+    """Reset tracked files + remove untracked, preserving dependency caches. Returns an
+    error string — and SKIPS the destructive reset/clean — when the worktree is not a
+    committed git checkout: a non-repo, or an untracked PRIMARY manifest (Cargo.toml/go.mod/
+    pyproject.toml/package.json — NOT a derived lockfile) that `git clean` would delete. That
+    guard (review P1 / #63) stops us silently nuking a target's source-of-truth manifest, which
+    would make bootstrap behave as if there were no manifest at all. Returns None on success."""
+    inside = subprocess.run(["git", "-C", worktree, "rev-parse", "--is-inside-work-tree"],
+                            capture_output=True, text=True)
+    if inside.returncode != 0 or inside.stdout.strip() != "true":
+        return f"not a git work tree: {worktree} — clone or git-init the target first"
+    excludes = [a for e in _CLEAN_KEEP for a in ("-e", e)]
+    # dry-run FIRST: list exactly what the real clean would delete (the excludes keep it from
+    # walking the big cache dirs, so this stays fast), and refuse if a manifest is among them.
+    dry = subprocess.run(["git", "-C", worktree, "clean", "-fdn", *excludes],
+                         capture_output=True, text=True)
+    manifests = adapters.primary_manifests()      # lockfiles are derived → safe to clean
+    doomed = [p for ln in dry.stdout.splitlines() if ln.startswith("Would remove ")
+              for p in (ln[len("Would remove "):].strip(),) if Path(p).name in manifests]
+    if doomed:
+        return ("uncommitted manifest would be deleted by reset: "
+                f"{', '.join(sorted(doomed))} — commit it (or git-init the target) first")
     subprocess.run(["git", "-C", worktree, "reset", "--hard", "-q"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
-    subprocess.run(["git", "-C", worktree, "clean", "-fdq", "-e", ".m2",
-                    "-e", ".repro-worktree.lock", "-e", ".oss-venv",
-                    "-e", ".oss-bootstrap.json", "-e", "node_modules"],
+    subprocess.run(["git", "-C", worktree, "clean", "-fdq", *excludes],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+    return None
 
 
 def place_java_reproducer(worktree: str, test_file: str, fqcn: str) -> None:
@@ -147,10 +172,10 @@ def parse_console(output: str) -> TestVerdict:
 
 
 def _capture(backend, argv, *, cwd, network, env, log, offline,
-             mem_limit_mb=None, name=None, image=None, mounts=None):
+             mem_limit_mb=None, name=None, image=None, mounts=None, container_env=None):
     """Run a command through the backend, capturing output while still streaming.
-    For container backends, `image` + `mounts` are honored (cwd is the in-container
-    workdir, e.g. /work)."""
+    For container backends, `image` + `mounts` + `container_env` (explicit -e allowlist,
+    e.g. cache-redirect vars) are honored (cwd is the in-container workdir, e.g. /work)."""
     lines: list = []
 
     def sink(line: str):
@@ -159,7 +184,7 @@ def _capture(backend, argv, *, cwd, network, env, log, offline,
             log(line)
     spec = RunSpec(argv=argv, cwd=cwd, network=network, mem_limit_mb=mem_limit_mb,
                    env=env, offline_argv=offline, name=name, image=image,
-                   mounts=mounts or [])
+                   mounts=mounts or [], container_env=container_env or {})
     rc = backend.run(spec, log=sink)
     return rc, "\n".join(lines)
 
@@ -185,7 +210,8 @@ def _adapter_run(backend, ad, worktree, selector, *, network, log, name):
     return _capture(backend, ad.container_argv(selector, abs_wt), cwd=_CONTAINER_WORK,
                     network=network, env=dict(os.environ), log=log,
                     offline=(network == "none"), name=name,
-                    image=ad.image, mounts=[(abs_wt, _CONTAINER_WORK)])
+                    image=ad.image, mounts=[(abs_wt, _CONTAINER_WORK)],
+                    container_env=ad.container_cache_env(_CONTAINER_WORK))   # #63 cache redirect
 
 
 def _compile_and_run_isolated(backend, cwd, fqcn, *, env, mvn_off, offline,
@@ -333,11 +359,13 @@ def _container_run_step(backend, ad, abs_wt, *, log):
     targets, so install commands (which execute target code) never touch the host (#62)."""
     backend.build_image(ad.image_dir, ad.image,
                         build_args={"UID": str(os.getuid()), "GID": str(os.getgid())}, log=log)
+    cache_env = ad.container_cache_env(_CONTAINER_WORK)   # #63: go/rust caches under /work
 
     def run_step(argv, *, cwd=None, network="bridge"):       # cwd ignored → always /work
         return _capture(backend, argv, cwd=_CONTAINER_WORK, network=network,
                         env=dict(os.environ), log=log, offline=(network == "none"),
-                        name="bootstrap", image=ad.image, mounts=[(abs_wt, _CONTAINER_WORK)])
+                        name="bootstrap", image=ad.image,
+                        mounts=[(abs_wt, _CONTAINER_WORK)], container_env=cache_env)
 
     return run_step
 
@@ -349,11 +377,11 @@ def _maybe_bootstrap(ad, worktree, backend, *, log):
 
     TRUST GATE (review P0): bootstrap runs install commands that EXECUTE target code
     (npm pre/postinstall, pip/PEP517 backends). So: TRUSTED → local backend → run on the
-    host. UNTRUSTED → container backend → run IN the container if the deps land in the
-    worktree (#62: Python .oss-venv / JS node_modules, shared via /work); otherwise
-    (cache-based langs: go/rust — caches live outside the worktree and don't survive
-    between the bootstrap and test containers) FAIL CLOSED until a shared cache mount is
-    wired. Never run an untrusted target's installs on the host."""
+    host. UNTRUSTED → container backend → run IN the container when the deps land in the
+    worktree and are thus shared with the test container via the /work mount: Python
+    .oss-venv / JS node_modules (#62), and go/rust whose module caches are redirected under
+    /work/.oss-go|.oss-cargo by container_cache_env (#63). An adapter that keeps deps
+    outside the worktree FAILS CLOSED. Never run an untrusted target's installs on the host."""
     try:
         import bootstrap as _bs
         if not _bs.needs_bootstrap(worktree, ad):
@@ -366,9 +394,9 @@ def _maybe_bootstrap(ad, worktree, backend, *, log):
                               run_step=_container_run_step(backend, ad, abs_wt, log=log))
         else:
             return TestVerdict(Outcome.DEP_ERROR, 0, 0, 0, 0,
-                               f"untrusted {getattr(ad, 'language', '?')} multi-dep target: "
-                               "in-container bootstrap needs a shared dependency-cache mount "
-                               "(not wired) — refusing to run installs on the host")
+                               f"untrusted {getattr(ad, 'language', '?')} target: adapter keeps "
+                               "deps outside the worktree (not bootstrap_in_worktree) — refusing "
+                               "to run installs on the host")
         if not r.get("ok"):
             return TestVerdict(Outcome.DEP_ERROR, 0, 0, 0, 0,
                                f"env-bootstrap failed at {r.get('step')}")
@@ -384,7 +412,8 @@ def _adapter_validate_repro(backend, worktree, test_file, *, lang, network, log)
         return TestVerdict(Outcome.TOOL_ERROR, 0, 0, 0, 0, f"no adapter for language '{lang}'")
     cwd = os.path.abspath(worktree)
     with worktree_lock(worktree):
-        pristine(worktree)
+        if (perr := pristine(worktree)):            # #63: refuse rather than nuke a manifest
+            return TestVerdict(Outcome.TOOL_ERROR, 0, 0, 0, 0, perr)
         berr = _maybe_bootstrap(ad, worktree, backend, log=log)
         if berr is not None:
             return berr
@@ -408,7 +437,8 @@ def _adapter_validate_fix(backend, worktree, test_file, patch, *, lang, network,
     cwd = os.path.abspath(worktree)
     patch_abs = os.path.abspath(patch)
     with worktree_lock(worktree):
-        pristine(worktree)
+        if (perr := pristine(worktree)):            # #63: refuse rather than nuke a manifest
+            return TestVerdict(Outcome.TOOL_ERROR, 0, 0, 0, 0, perr)
         berr = _maybe_bootstrap(ad, worktree, backend, log=log)
         if berr is not None:
             return berr

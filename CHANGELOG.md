@@ -411,6 +411,21 @@ missed.
   CLOSED** (a shared cache mount is the remaining piece, #63). Trust-gate test updated +1
   → **suite 297**. Wired + unit-tested (mock backend); the real container run is host-only
   (no daemon here). #49 re-verified locally with relative paths. See §11.29.
+- **#63 — go/rust shared dep-cache + yarn/pnpm bootstrap + pristine manifest guard (the
+  #62 residual)**: untrusted go/rust no longer fail closed. Their module caches are
+  redirected INTO the worktree (`GOMODCACHE`/`GOCACHE` → `/work/.oss-go`, `CARGO_HOME` →
+  `/work/.oss-cargo`) via a new `adapter.container_cache_env()`, so `go mod download` /
+  `cargo fetch` (bootstrap container) and `go test` / `cargo test` (test container) share
+  one cache through the existing `/work` mount — no host-cache poisoning, no separate
+  mount; go/rust thus join Python/JS as `bootstrap_in_worktree`. The vars reach the
+  container via a new explicit `RunSpec.container_env` → `-e` ALLOWLIST (never host
+  `os.environ`, so `GH_TOKEN`/creds can't leak in). JS `bootstrap_steps` now picks the
+  package manager from the lockfile (pnpm/yarn via `corepack`, else npm). `pristine()`
+  gained a guard (review P1): it refuses — with a clear TOOL_ERROR — to `git clean` a
+  non-repo or an untracked SOURCE-OF-TRUTH manifest (Cargo.toml/go.mod/pyproject.toml/
+  package.json), while still cleaning derived lockfiles (Cargo.lock/go.sum/*-lock) and
+  preserving the `.oss-*` caches. +5 tests → **suite 302**; real go/rust/Python local
+  e2e re-verified. The in-container go/rust run stays host-only (no daemon here). See §11.30.
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 

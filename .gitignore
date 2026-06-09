@@ -14,9 +14,11 @@ tool/webapp/dist/
 target/
 **/target/
 
-# --- Per-target engine artifacts (M5 bootstrap) ---
+# --- Per-target engine artifacts (M5 bootstrap; #63 worktree-local go/rust caches) ---
 .oss-venv/
 .oss-bootstrap.json
+.oss-go/
+.oss-cargo/
 
 # --- Review + scratch intermediates ---
 .reviews/
