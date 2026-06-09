@@ -1,0 +1,6 @@
+# Pass-1 code-quality hunt. Agent returned no bet-money findings (it evaluated
+# and explicitly rejected 4 candidates: PropertyValueBuffer._findMissing NPE
+# reachable only via deprecated ctor; BeanReferring.handleResolvedForwardReference
+# unreachable set-after-throw; CollectionDeserializer object-id null path (obscure);
+# PropertyValueBuffer bitmask boundary — all correct/not user-reachable).
+findings: []

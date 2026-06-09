@@ -1,0 +1,7 @@
+{
+  "repo": "https://github.com/FasterXML/jackson-databind.git",
+  "tag": "jackson-databind-2.21.3",
+  "version": "2.21.3",
+  "commit": "1c38a7d873c88ed88c65d011c5d162fbdd5c1635",
+  "pinned_at": "2026-05-18T08:17:35Z"
+}

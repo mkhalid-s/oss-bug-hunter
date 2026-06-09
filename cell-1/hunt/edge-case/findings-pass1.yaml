@@ -1,0 +1,31 @@
+# Pass-1 edge-case hunt.
+findings:
+  - summary: "Object-Id collection path adds JSON null directly to a null-hostile collection, bypassing the _tryToAddNull NPE-guard used by all sibling paths"
+    location: "src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java:464-479"
+    type: "empty-collection"
+    evidence: |
+      In _deserializeWithObjectId, a VALUE_NULL element resolves to:
+          if (value == null) {
+              value = _nullProvider.getNullValue(ctxt);
+              if (value == null && _skipNullValues) {
+                  continue;
+              }
+          }
+          referringAccumulator.add(value);   // value may be null here
+      When _skipNullValues is false and the null provider yields null, the null
+      is passed to CollectionReferringAccumulator.add(), which does
+      `_result.add(value)` (line 594) -> a raw add(null). Every other element path
+      in this class (_deserializeFromArray line 366, handleNonArray line 430,
+      _wrapSingleWithObjectId line 517) routes a leftover null through
+      `_tryToAddNull(...)`, which catches the NullPointerException thrown by
+      null-hostile collections (e.g. TreeSet) and reports a friendly
+      handleUnexpectedToken message instead. The Object-Id path omits this guard,
+      so the same input throws an unhandled/raw NPE only when the collection
+      elements carry Object Ids.
+    reproducer_hint: |
+      // Set<Node> where Node has @JsonIdentityInfo, backing collection is a TreeSet
+      // (which rejects null). Input contains a null element among id-bearing objects:
+      String json = "[{\"@id\":1,\"v\":\"a\"}, null]";
+      mapper.readValue(json, new TypeReference<TreeSet<Node>>(){});
+      // Plain (non-ObjectId) elements would yield a clean InvalidFormat/handleUnexpectedToken;
+      // with @JsonIdentityInfo present, _deserializeWithObjectId runs and add(null) throws raw NPE.

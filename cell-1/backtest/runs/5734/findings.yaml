@@ -1,0 +1,18 @@
+findings:
+  - summary: "ByteDeserializer float-coercion uses _shortOverflow instead of _byteOverflow, silently truncating out-of-byte-range float values"
+    location: "src/main/java/tools/jackson/databind/deser/jdk/NumberDeserializers.java:295-300"
+    type: "edge-case"
+    evidence: |
+      int i = p.getValueAsInt();
+      if (_shortOverflow(i)) {        // BUG: should be _byteOverflow(i)
+          return p.getByteValue();    // intended to trigger overflow error
+      }
+      return (byte) i;
+      For a Byte target, overflow must be checked with _byteOverflow (range -128..255).
+      _shortOverflow only catches values outside -32768..32767, so a float like 300.0
+      passes the check (false), skips the getByteValue() overflow path, and returns
+      (byte) 300 == 44 - a silently wrapped wrong value. The equivalent integer token 300
+      goes through getByteValue() and correctly raises an overflow error, so behavior is
+      inconsistent and incorrect. ShortDeserializer._parseShort correctly uses _shortOverflow,
+      confirming the wrong helper was used here.
+    reproducer_hint: "Deserialize JSON number 300.0 into a Byte field with float->int coercion allowed; expect overflow error, get 44 instead."

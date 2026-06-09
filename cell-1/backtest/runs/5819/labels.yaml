@@ -1,0 +1,10 @@
+issue: 5819
+known_bug:
+  title: "`JsonNodeFeature.STRIP_TRAILING_BIGDECIMAL_ZEROES` not working with `ObjectMapper.valueToTree()`"
+  url: "https://github.com/FasterXML/jackson-databind/issues/5819"
+  fix_commit: 87667cefc6625677e6827c6565500a2c3e88d395
+matched_rank: null
+labels:
+  - index: 0
+    label: unrelated_tp
+    note: "Finding lands on the exact strip-zeros block in TreeBuildingGenerator that the fix touched, but describes a different defect (uncaught ArithmeticException on extreme-scale BigDecimal) rather than the feature-not-applied symptom reported. Strong file/area localization, different bug."

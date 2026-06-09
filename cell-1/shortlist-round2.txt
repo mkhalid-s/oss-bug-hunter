@@ -1,0 +1,16 @@
+# Cell #1 — fresh-hunt shortlist (round 2), built 2026-06-06.
+#
+# Selection rule (the lesson from the baseline work): target high-churn deser
+# files the FREE scanners did NOT flag, to maximize marginal signal over free
+# tools. Round-1 found ec-1 (failed self-consistency); SpotBugs+Semgrep then
+# showed 70% file-level overlap, so round 2 deliberately AVOIDS baseline-flagged
+# files and round-1 files.
+#
+# CAVEAT (honest): the uncovered high-churn set is small and skews toward
+# abstract bases / interfaces (thin bug surface) — that narrow gap is itself a
+# Phase-0 datum. Swap in concrete, logic-heavy files if these come back empty.
+
+src/main/java/com/fasterxml/jackson/databind/deser/std/DelegatingDeserializer.java
+src/main/java/com/fasterxml/jackson/databind/deser/DeserializerFactory.java
+src/main/java/com/fasterxml/jackson/databind/deser/ValueInstantiator.java
+src/main/java/com/fasterxml/jackson/databind/deser/DeserializationProblemHandler.java

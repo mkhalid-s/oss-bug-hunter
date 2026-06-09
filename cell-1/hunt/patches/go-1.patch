@@ -1,0 +1,14 @@
+diff --git a/mathx.go b/mathx.go
+index 39a3d4e..e687112 100644
+--- a/mathx.go
++++ b/mathx.go
+@@ -3,6 +3,9 @@ package gobug
+ // RunningMax returns the running maximum of xs at each position.
+ func RunningMax(xs []int) []int {
+ 	out := []int{}
++	if len(xs) == 0 {
++		return out
++	}
+ 	m := xs[0]
+ 	for _, n := range xs {
+ 		if n > m {

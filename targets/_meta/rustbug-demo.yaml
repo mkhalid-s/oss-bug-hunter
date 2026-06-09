@@ -1,0 +1,6 @@
+name: rustbug-demo
+repo: null
+sha: 5738a61
+language: rust
+adapter: cargo-test
+trusted: true

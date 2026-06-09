@@ -1,0 +1,11 @@
+findings:
+  - summary: "Data race on non-volatile `delegate` field read in unsynchronized get(); unsafe publication of memoized MethodHandle across threads"
+    location: "src/main/java/tools/jackson/databind/util/internal/UnreflectHandleSupplier.java:18,25-27,29-41"
+    type: "race"
+    evidence: "`private boolean initialized;` and `private Supplier<MethodHandle> delegate = this::initialize;` are non-volatile. `initialize()` is `synchronized` and writes `delegate = () -> mh`, but `get()` reads `delegate` with no synchronization. There is no happens-before edge between the synchronized write and the plain read, so a second thread can read the freshly-published `() -> mh` lambda whose captured `mh` was published via a data race (no safe publication). Memoization stays correct only because a thread that sees the stale `this::initialize` re-enters the synchronized `initialize()` and re-checks `initialized`; but the published lambda's captured handle is not guaranteed to be fully visible. Marking `delegate` (and `initialized`) volatile is required for correct cross-thread publication."
+    reproducer_hint: "Multiple threads call get()/toString() on the same holder before initialization completes on weak-memory hardware."
+  - summary: "toString() throws NPE when the resolved MethodHandle is null"
+    location: "src/main/java/tools/jackson/databind/util/internal/UnreflectHandleSupplier.java:43-51,56-58"
+    type: "NPE"
+    evidence: "`postprocess(MethodHandle mh)` explicitly handles and returns `null` (`if (mh == null) return mh;`), so `get()` can legitimately return null. `toString()` does `return get().toString();` which dereferences that null -> NullPointerException. The class clearly anticipates a null handle (the null guard in postprocess) yet toString assumes non-null."
+    reproducer_hint: "A subclass whose unreflect() returns null (the documented null path), then call toString() on the supplier."

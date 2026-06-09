@@ -1,0 +1,18 @@
+finding_id: rs-1
+angle: edge-case
+type: empty-input
+location: src/lib.rs:running_max
+summary: running_max(&[]) panics (index out of bounds) on an empty slice — indexes xs[0] before the loop
+language: rust
+target: rustbug-demo
+evidence: |
+  running_max reads xs[0] before iterating; on an empty slice that panics.
+  (Synthetic demo target; validated end-to-end locally via cargo 1.95.0 in the devcontainer.)
+dedup_auto: {osv_matches: [], github_matches: []}
+gates:
+  reproducer: {status: pass, path: cell-1/hunt/repros/rs-1.rs, notes: 'cargo test reproduces the panic on HEAD (test FAILED); validated locally 2026-06-08 via run_harness orchestrate --lang rust.'}
+  dedup: {is_duplicate: false, references: [], notes: synthetic demo finding}
+  cwe: {cwe: CWE-129, cvss: 'N/A', notes: improper validation of array index}
+  fix_passes_tests: {status: pass, patch_path: cell-1/hunt/patches/rs-1.patch, notes: 'reproducer test PASSES after the fix (running_max_empty_returns_empty ok); orchestrate -> validated, attempts=1.'}
+final_status: validated
+self_consistency: {}

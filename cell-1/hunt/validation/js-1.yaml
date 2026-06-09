@@ -1,0 +1,26 @@
+finding_id: js-1
+angle: edge-case
+type: wrong-initialization
+location: mathx.js:runningMax
+summary: runningMax seeds the max from 0, so all-negative input yields zeros instead of the real running max
+language: javascript
+target: jsbug-demo
+evidence: |
+  `let m = 0` assumes a non-negative max; runningMax([-5,-3]) returns [0,0]
+  instead of [-5,-3]. (Synthetic demo target.)
+dedup_auto: {osv_matches: [], github_matches: []}
+gates:
+  reproducer:
+    status: pass
+    path: cell-1/hunt/repros/js-1.js
+    backend: local
+    notes: REPRODUCES via node --test on HEAD.
+  dedup: {is_duplicate: false, references: [], notes: synthetic demo finding}
+  cwe: {cwe: CWE-665, cvss: 'N/A', notes: improper initialization}
+  fix_passes_tests:
+    status: pass
+    patch_path: cell-1/hunt/patches/js-1.patch
+    backend: local
+    notes: seeding the max from the first element fixes it; reproducer passes.
+final_status: validated
+self_consistency: {passes_total: 1, agreement: 1/1, survived: true}

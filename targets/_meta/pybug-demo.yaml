@@ -1,0 +1,6 @@
+name: pybug-demo
+repo: null
+sha: 85aa5a3
+language: python
+adapter: python-pytest
+trusted: true

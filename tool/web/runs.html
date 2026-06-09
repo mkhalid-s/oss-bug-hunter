@@ -1,0 +1,79 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>OSS Bug Hunter — live runs (U0 spike)</title>
+<style>
+  :root { color-scheme: dark; }
+  body { font: 14px/1.5 ui-monospace, SFMono-Regular, Menlo, monospace;
+         margin: 0; background:#0d1117; color:#c9d1d9; }
+  header { padding:12px 16px; border-bottom:1px solid #21262d; display:flex;
+           gap:10px; align-items:center; flex-wrap:wrap; }
+  h1 { font-size:15px; margin:0 12px 0 0; color:#58a6ff; }
+  button { background:#238636; color:#fff; border:0; border-radius:6px;
+           padding:7px 12px; cursor:pointer; font:inherit; }
+  button.alt { background:#1f6feb; }
+  button:disabled { opacity:.5; cursor:default; }
+  .meta { padding:8px 16px; color:#8b949e; }
+  .badge { padding:2px 8px; border-radius:10px; font-size:12px; }
+  .running{background:#9e6a03;color:#fff} .done{background:#238636;color:#fff}
+  .error{background:#da3633;color:#fff} .idle{background:#30363d;color:#c9d1d9}
+  pre { margin:0; padding:12px 16px; white-space:pre-wrap; word-break:break-word;
+        max-height:72vh; overflow:auto; }
+  .ln { display:block; } .stderr { color:#f0883e; }
+  .note { color:#8b949e; font-size:12px; padding:0 16px 10px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>OSS Bug Hunter · live runs</h1>
+  <button id="demo">▶ Start demo run</button>
+  <button id="repro" class="alt" title="Reproduce ec-1 in isolation via the JUnit Console Launcher (compiles first; ~1 min)">▶ Reproduce ec-1</button>
+  <button id="orch" class="alt" title="Self-correcting loop: reproduce → fix → verdict (~2 min)">▶ Orchestrate ec-1 (reproduce→fix)</button>
+  <span>status: <span id="status" class="badge idle">idle</span></span>
+  <span id="rid" class="meta"></span>
+</header>
+<div class="note">U0 spike page (vanilla EventSource) — proves the SSE seam end-to-end. The real UI is React+Vite+Mantine (plan §4).</div>
+<pre id="log"></pre>
+<script>
+const T = window.AUTH_TOKEN;
+const $ = id => document.getElementById(id);
+const logEl = $('log'), statusEl = $('status');
+let es = null;
+
+function setStatus(s){ statusEl.textContent = s; statusEl.className = 'badge ' + s; }
+function line(text, cls){ const d=document.createElement('span'); d.className='ln'+(cls?' '+cls:''); d.textContent=text; logEl.appendChild(d); logEl.scrollTop=logEl.scrollHeight; }
+
+async function startRun(kind, params){
+  if (es) es.close();
+  logEl.textContent=''; setStatus('running'); $('demo').disabled=$('repro').disabled=true;
+  let r;
+  try {
+    r = await fetch('/api/runs', { method:'POST',
+      headers:{ 'Authorization':'Bearer '+T, 'Content-Type':'application/json' },
+      body: JSON.stringify({ kind, params }) }).then(x=>x.json());
+  } catch(e){ line('[ui] POST failed: '+e, 'stderr'); setStatus('error'); enable(); return; }
+  if (!r.ok && r.error){ line('[ui] '+r.error.message, 'stderr'); setStatus('error'); enable(); return; }
+  const id = r.run_id; $('rid').textContent = 'run: '+id;
+  // EventSource cannot send Authorization headers -> token via query param.
+  es = new EventSource(`/api/runs/${id}/stream?token=${encodeURIComponent(T)}`);
+  es.addEventListener('log', ev => { const d=JSON.parse(ev.data); line(d.line, d.stream==='stderr'?'stderr':null); });
+  es.addEventListener('done', ev => { const d=JSON.parse(ev.data);
+    setStatus(d.status==='done'?'done':'error');
+    line('— '+JSON.stringify(d), null); es.close(); enable(); });
+  es.onerror = () => { line('[ui] stream error/closed', 'stderr'); enable(); };
+}
+function enable(){ $('demo').disabled=$('repro').disabled=false; }
+
+const EC1 = {
+  worktree:'targets/jackson-databind',
+  fqcn:'com.fasterxml.jackson.databind.repro.Repro_ec_1',
+  test_file:'cell-1/hunt/repros/ec-1.java',
+  patch:'cell-1/hunt/patches/ec-1.patch', trusted:true, network:'bridge' };
+$('demo').onclick = () => startRun('demo', {});
+$('repro').onclick = () => startRun('validate-repro', EC1);
+$('orch').onclick = () => startRun('orchestrate', EC1);
+</script>
+</body>
+</html>

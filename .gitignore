@@ -1,0 +1,40 @@
+# --- Python ---
+__pycache__/
+*.py[cod]
+.venv/
+.pytest_cache/
+*.egg-info/
+
+# --- Node / web build (FastAPI serves a prebuilt bundle; sources are tracked) ---
+node_modules/
+dist/
+tool/webapp/dist/
+
+# --- Rust / Go / native build outputs ---
+target/
+**/target/
+
+# --- Per-target engine artifacts (M5 bootstrap) ---
+.oss-venv/
+.oss-bootstrap.json
+
+# --- Review + scratch intermediates ---
+.reviews/
+.reviews-local/
+.adopt-src/
+
+# --- Cloned targets (external, fetched on demand — NOT ours to commit).
+#     Synthetic *-demo targets + targets/_meta ARE tracked (test fixtures). ---
+/targets/jackson-databind/
+/targets/headroom/
+
+# Nested git repos: the engine needs each target to BE a git repo (for
+# git apply / pristine), so committing them as content/gitlinks is broken.
+# Treated like the cloned real targets (jackson-databind above) — excluded;
+# only targets/_meta sidecars + cell-1 findings are tracked. Portability of the
+# synthetic demo targets (commit source + git-init at setup) is a follow-up.
+cell-1/backtest/worktrees/
+/targets/gobug-demo/
+/targets/jsbug-demo/
+/targets/pybug-demo/
+/targets/rustbug-demo/

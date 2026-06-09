@@ -1,0 +1,17 @@
+findings:
+  - summary: "writeNumber(BigDecimal) calls stripTrailingZeros() without the ArithmeticException guard used everywhere else, so extreme-scale BigDecimals throw an uncaught Overflow exception"
+    location: "src/main/java/tools/jackson/databind/node/TreeBuildingGenerator.java:411-415"
+    type: "other"
+    evidence: |
+      if (_cfgStripTrailingBigDecimalZeroes) {
+          v = v.stripTrailingZeros();
+      }
+      _tokenWriteContext.writeNumber(_nodeFactory.numberNode(v));
+      The project's own canonical normalization (BaseNodeDeserializer._normalize, lines 581-592) wraps the identical
+      call: `try { nr = nr.stripTrailingZeros(); } catch (ArithmeticException e) { ; }` with the comment
+      "[dataformats-binary#264] barfs ... Overflow". BigDecimal.stripTrailingZeros() throws ArithmeticException
+      ("Overflow") for values with extreme scale (e.g. new BigDecimal(BigInteger.TEN, Integer.MIN_VALUE)).
+      The TreeBuildingGenerator copy omits the try/catch, so the exception propagates out of serialization
+      instead of falling back to the un-normalized value. Confirmed by reproduction: the value above throws
+      "ArithmeticException: Overflow".
+    reproducer_hint: "With STRIP_TRAILING_BIGDECIMAL_ZEROES enabled, serialize a value containing new BigDecimal(BigInteger.TEN, Integer.MIN_VALUE) to a tree (valueToTree)"

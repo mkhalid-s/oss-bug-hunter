@@ -1,0 +1,13 @@
+{
+  "enabledMcpjsonServers": [
+    "confluence",
+    "jira",
+    "devassistant",
+    "figma",
+    "github",
+    "guidewire-docs",
+    "guidewire-docs-staging",
+    "jutro",
+    "jutro-developer-assistant"
+  ]
+}

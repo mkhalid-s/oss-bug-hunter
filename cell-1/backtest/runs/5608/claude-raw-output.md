@@ -1,0 +1,55 @@
+After careful analysis of these three files, I've identified the following correctness bugs:
+
+```yaml
+findings:
+  - summary: "FunctionalScalarDeserializer._handleException passes potentially null text to weirdStringException"
+    location: "src/main/java/tools/jackson/databind/deser/std/FunctionalScalarDeserializer.java:127-150"
+    type: "NPE"
+    evidence: |
+      Line 134: `return _handleException(p.getValueAsString(), ctxt, e);`
+      
+      The method calls p.getValueAsString() which can return null when the parser is at a 
+      non-scalar token (START_ARRAY, START_OBJECT, or null token). This null is passed to 
+      the String overload at line 148: `ctxt.weirdStringException(text, _valueClass, msg)`.
+      
+      If weirdStringException doesn't handle null text, this causes an NPE.
+      
+      Context: This occurs when the BiFunction throws an exception and the parser is left 
+      in an unexpected state (e.g., at a START_OBJECT token where getValueAsString() returns null).
+    reproducer_hint: "Create FunctionalScalarDeserializer with a BiFunction that throws while the parser points to START_OBJECT or START_ARRAY"
+
+  - summary: "ExceptionUtil.isFatal includes InterruptedException but rethrowIfFatal incorrectly wraps it as unchecked"
+    location: "src/main/java/tools/jackson/databind/util/ExceptionUtil.java:28-59"
+    type: "wrong-return"
+    evidence: |
+      Line 52: InterruptedException is marked as fatal
+      Lines 30-36: But when rethrowIfFatal processes fatal InterruptedException:
+      - It's not instanceof Error (line 30)
+      - It's not instanceof RuntimeException (line 33)  
+      - So it executes line 36: `throw new RuntimeException(throwable);`
+      
+      This creates a RuntimeException wrapping InterruptedException, but the method signature 
+      declares `throws Error, RuntimeException` - allowing the caller to catch RuntimeException 
+      without knowledge that a thread interruption occurred. Callers expecting to handle 
+      InterruptedException will miss it, and thread interruption signals may be lost.
+    reproducer_hint: "Pass an InterruptedException to rethrowIfFatal and catch RuntimeException; the original InterruptedException is hidden"
+
+  - summary: "FactoryBasedEnumDeserializer.deserialize may access undefined method handleMissingEndArrayForSingle or ignore its side effects"
+    location: "src/main/java/tools/jackson/databind/deser/jdk/FactoryBasedEnumDeserializer.java:182-186"
+    type: "other"
+    evidence: |
+      Lines 182-186:
+      ```java
+      if (unwrapping) {
+          if (p.nextToken() != JsonToken.END_ARRAY) {
+              handleMissingEndArrayForSingle(p, ctxt);  // <- line 184
+          }
+      }
+      ```
+      
+      The method handleMissingEndArrayForSingle is called but not defined in this class or 
+      parent StdDeserializer (visible in this codebase). If this method completes without 
+      throwing, execution continues to line 196 with the parser in an unknown state. The 
+      code then calls _factory.callOnWith() on a corrupted parser position.
+    reproducer_hint: "Trigger unwrapping mode (UNWRAP_SINGLE_VALUE_ARRAYS enabled) with JSON that has extra tokens after the single array value"
+```

@@ -1,0 +1,10 @@
+issue: 5851
+known_bug:
+  title: "Regression of `JsonTypeInfo.Id.MINIMAL_CLASS` in the 3.x branch"
+  url: "https://github.com/FasterXML/jackson-databind/issues/5851"
+  fix_commit: e1247b0ee9741f6145b454d25ac1a266806ba3db
+matched_rank: null
+labels:
+  - index: 0
+    label: unrelated_tp
+    note: "Null-PropertyFilter NPE in acceptJsonFormatVisitor is a real bug in BeanSerializerBase (the fix file) but unrelated to the MINIMAL_CLASS type-id regression this issue reports."

@@ -1,0 +1,19 @@
+diff --git a/src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java b/src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java
+--- a/src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java
++++ b/src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java
+@@ -472,9 +472,12 @@
+ 
+                 if (value == null) {
+                     value = _nullProvider.getNullValue(ctxt);
+-                    if (value == null && _skipNullValues) {
+-                        continue;
+-                    }
++
++                    // _skipNullValues is checked by _tryToAddNull.
++                    if (value == null) {
++                        _tryToAddNull(p, ctxt, result);
++                        continue;
++                    }
+                 }
+                 referringAccumulator.add(value);
+             } catch (UnresolvedForwardReference reference) {

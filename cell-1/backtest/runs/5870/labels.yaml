@@ -1,0 +1,13 @@
+issue: 5870
+known_bug:
+  title: "`EnumMap` and `EnumSet` properties ignore `@JsonDeserialize(contentConverter)`"
+  url: "https://github.com/FasterXML/jackson-databind/issues/5870"
+  fix_commit: b77792a594d571867736156e245b4d147095d742
+matched_rank: null
+labels:
+  - index: 0
+    label: unrelated_tp
+    note: "withResolved comparing _nullProvider against deser instead of nuller is a real logic bug in EnumSetDeserializer (a fix file) but distinct from the contentConverter-ignored defect this issue reports."
+  - index: 1
+    label: unrelated_tp
+    note: "Wrong error-path index (Set.size() vs array index) is a real minor bug in EnumSetDeserializer, unrelated to the reported contentConverter handling."

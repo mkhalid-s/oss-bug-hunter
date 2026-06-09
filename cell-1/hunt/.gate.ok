@@ -1,0 +1,3 @@
+Day-2 gate decision: PROCEED to Day 3 (2026-06-05).
+file_coverage@3=80%, file_match_precision@5=100%, novel-over-baseline 8/10.
+Baseline: real Semgrep java ruleset (security-leaning); SpotBugs still blocked (Docker down).

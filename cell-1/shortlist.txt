@@ -1,0 +1,9 @@
+# Cell #1 shortlist — 5 hot-spot files for Day 3 novel hunt.
+# Picked from cell-1/recon/hot-spots-coarse.txt + cell-1/recon/explore-inventory.md
+# (mix of high mention-count and high recent-change density, broad bug-category coverage).
+
+src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java
+src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializerBase.java
+src/main/java/com/fasterxml/jackson/databind/deser/std/NumberDeserializers.java
+src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java
+src/main/java/com/fasterxml/jackson/databind/deser/impl/PropertyValueBuffer.java

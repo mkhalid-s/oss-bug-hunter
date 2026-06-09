@@ -1,0 +1,6 @@
+name: jsbug-demo
+repo: null
+sha: ae14c4e
+language: javascript
+adapter: js-node
+trusted: true

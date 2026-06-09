@@ -1,0 +1,18 @@
+findings:
+  - summary: "acceptJsonFormatVisitor dereferences a possibly-null PropertyFilter without the null check that _serializePropertiesFiltered performs"
+    location: "src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java:930-935"
+    type: "NPE"
+    evidence: |
+      When _propertyFilterId != null:
+        PropertyFilter filter = findPropertyFilter(visitor.getContext(), _propertyFilterId, null);
+        for (int i = 0, end = _props.length; i < end; ++i) {
+            filter.depositSchemaProperty(_props[i], objectVisitor, ctxt);  // line 934
+        }
+      findPropertyFilter() (StdSerializer.java:381) returns whatever FilterProvider.findPropertyFilter()
+      returns, and its own comment says "whether unknown ids are ok just depends on filter provider;
+      if we get null that's fine" -- i.e. null is a legitimate return value (e.g. a SimpleFilterProvider
+      with setFailOnUnknownId(false), or a provider returning null for the id). The runtime serialization
+      twin, _serializePropertiesFiltered (lines 866-880), explicitly handles this: "if (filter == null)"
+      falls back to _serializePropertiesNoView/_serializePropertiesMaybeView. The visitor path has no such
+      guard, so filter.depositSchemaProperty(...) throws NullPointerException.
+    reproducer_hint: "Generate a JSON schema (acceptJsonFormatVisitor / generateJsonSchema) for a @JsonFilter-annotated bean using a FilterProvider that returns null for that filter id (e.g. SimpleFilterProvider with failOnUnknownId=false and no filter registered)."

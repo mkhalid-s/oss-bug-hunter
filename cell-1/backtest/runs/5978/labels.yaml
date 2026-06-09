@@ -1,0 +1,10 @@
+issue: 5978
+known_bug:
+  title: "BuilderBasedDeserializer unwrapped update path still uses ignorable-only check"
+  url: "https://github.com/FasterXML/jackson-databind/issues/5978"
+  fix_commit: a7f3d0ea323cba4c1152ff9a14696d597fa43122
+matched_rank: null
+labels:
+  - index: 0
+    label: unrelated_tp
+    note: "External-type-id missing-continue is a real bug in BuilderBasedDeserializer (the fix file) but distinct from the unwrapped-update-path ignorable-only-check defect this issue reports."

@@ -1,0 +1,111 @@
+# Auto-finalized from dataset-autopick.yaml. expected_subagent inferred from title keywords.
+
+dataset:
+- issue: 5870
+  title: '`EnumMap` and `EnumSet` properties ignore `@JsonDeserialize(contentConverter)`'
+  url: https://github.com/FasterXML/jackson-databind/issues/5870
+  fix_commit: b77792a594d571867736156e245b4d147095d742
+  parent_commit: 575f922a759066c6ccb99c42034ccf01d0dabb58
+  files_touched:
+  - release-notes/VERSION-2.x
+  - src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java
+  - src/main/java/com/fasterxml/jackson/databind/deser/std/EnumSetDeserializer.java
+  - src/test/java/com/fasterxml/jackson/databind/convert/ConvertingDeserializerTest.java
+  expected_subagent: edge-case
+  notes: Auto-picked from candidates. Angle inferred from title keywords.
+- issue: 5851
+  title: Regression of `JsonTypeInfo.Id.MINIMAL_CLASS` in the 3.x branch
+  url: https://github.com/FasterXML/jackson-databind/issues/5851
+  fix_commit: e1247b0ee9741f6145b454d25ac1a266806ba3db
+  parent_commit: 8c6439de9732b134feb82452ba4da12525d6d365
+  files_touched:
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
+  expected_subagent: edge-case
+  notes: Auto-picked from candidates. Angle inferred from title keywords.
+- issue: 5840
+  title: Jackson 2.21 throws Conflicting property-based creators if both default (0-arg) and multi-arg constructor annotated
+  url: https://github.com/FasterXML/jackson-databind/issues/5840
+  fix_commit: 575f922a759066c6ccb99c42034ccf01d0dabb58
+  parent_commit: aa6ee366c4d427ed05972f1cab1c2bf334a3560b
+  files_touched:
+  - release-notes/CREDITS-2.x
+  - release-notes/VERSION-2.x
+  - src/main/java/com/fasterxml/jackson/databind/introspect/POJOPropertiesCollector.java
+  - src/test/java/com/fasterxml/jackson/databind/deser/creators/JsonCreatorDefaultAndPropertiesCtors5840Test.java
+  expected_subagent: code-quality
+  notes: Auto-picked from candidates. Angle inferred from title keywords.
+- issue: 5819
+  title: '`JsonNodeFeature.STRIP_TRAILING_BIGDECIMAL_ZEROES` not working with `ObjectMapper.valueToTree()`'
+  url: https://github.com/FasterXML/jackson-databind/issues/5819
+  fix_commit: 87667cefc6625677e6827c6565500a2c3e88d395
+  parent_commit: bc93f2410a6fb36946ad707067ab68c85af1ebf3
+  files_touched:
+  - src/main/java/tools/jackson/databind/node/TreeBuildingGenerator.java
+  expected_subagent: code-quality
+  notes: Auto-picked from candidates. Angle inferred from title keywords.
+- issue: 5813
+  title: '`JsonMapper` not thread-safe when using custom serializers'
+  url: https://github.com/FasterXML/jackson-databind/issues/5813
+  fix_commit: e755604df066dee43d277a9add9045e768cf08ae
+  parent_commit: cff32da7aede7ba0364f732e9ae1a542a18c756f
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/ser/SerializerCache.java
+  - src/test/java/tools/jackson/databind/misc/ThreadSafetyWithConverterMixin5813Test.java
+  expected_subagent: code-quality
+  notes: Auto-picked from candidates. Angle inferred from title keywords.
+- issue: 5734
+  title: '`DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES` treats absent field same as explicit `null`'
+  url: https://github.com/FasterXML/jackson-databind/issues/5734
+  fix_commit: 202c51f8d43e0c5504b446f02dad68f20fa4e43e
+  parent_commit: cfe49187fbdd84f2b068538929e493632586dd4b
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/deser/jdk/NumberDeserializers.java
+  - src/test/java/tools/jackson/databind/deser/creators/CreatorNullPrimitivesTest.java
+  expected_subagent: code-quality
+  notes: Auto-picked from candidates. Angle inferred from title keywords.
+- issue: 5616
+  title: '`ObjectWriter` serializes reference types (like `AtomicReference`, `Optional`) with subtypes incompletely'
+  url: https://github.com/FasterXML/jackson-databind/issues/5616
+  fix_commit: 944c77305c9bea17058e1f002feacf0aae4d5b4f
+  parent_commit: 8c8bd3dbc0ade33ed96b7432acdcdd150c793086
+  files_touched:
+  - release-notes/CREDITS-2.x
+  - release-notes/VERSION-2.x
+  - src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java
+  - src/test/java/com/fasterxml/jackson/databind/ser/jdk/AtomicTypeSerializationTest.java
+  expected_subagent: code-quality
+  notes: Auto-picked from candidates. Angle inferred from title keywords.
+- issue: 5615
+  title: JsonMapper seems to be not thread-safe when using the polymorphic `JsonTypeInfo.As.PROPERTY` definition (and `@JsonIgnoreProperties`)
+  url: https://github.com/FasterXML/jackson-databind/issues/5615
+  fix_commit: f4ec2196dd9fe99185cfd5da8a6de84f5db538f1
+  parent_commit: 90087749d89cbac289a603be46745df6bb80a98a
+  files_touched:
+  - src/main/java/tools/jackson/databind/util/internal/UnreflectHandleSupplier.java
+  expected_subagent: edge-case
+  notes: Auto-picked from candidates. Angle inferred from title keywords.
+- issue: 5608
+  title: Confusing error-handling logic in `FunctionalScalarDeserializer` (Wrapped with exceptions)
+  url: https://github.com/FasterXML/jackson-databind/issues/5608
+  fix_commit: 540722065dabad138b41eeb4804bc896f31178d3
+  parent_commit: 366f3ca05a3577a2ba1a3ad82876456d95f2693b
+  files_touched:
+  - src/main/java/tools/jackson/databind/deser/jdk/FactoryBasedEnumDeserializer.java
+  - src/main/java/tools/jackson/databind/deser/std/FunctionalScalarDeserializer.java
+  - src/main/java/tools/jackson/databind/util/ExceptionUtil.java
+  expected_subagent: code-quality
+  notes: Auto-picked from candidates. Angle inferred from title keywords.
+- issue: 5978
+  title: BuilderBasedDeserializer unwrapped update path still uses ignorable-only check
+  url: https://github.com/FasterXML/jackson-databind/issues/5978
+  fix_commit: a7f3d0ea323cba4c1152ff9a14696d597fa43122
+  parent_commit: 4e70420b31c442be879bf051e6c1069d63259795
+  files_touched:
+  - src/main/java/tools/jackson/databind/deser/bean/BuilderBasedDeserializer.java
+  expected_subagent: edge-case
+  notes: Auto-picked from candidates. Angle inferred from title keywords.

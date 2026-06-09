@@ -1,0 +1,25 @@
+# Human scoring for this backtest entry.
+#
+# For each finding in findings.yaml, add an entry below with the same index
+# (0-based, in order) and a label:
+#
+#   matches_known      — describes the historical bug for this entry
+#   unrelated_tp       — describes a different real bug
+#   fp                 — describes something that is not actually a bug
+#   dupe_of_baseline   — duplicates a Semgrep or SpotBugs baseline finding
+#
+# Add a one-line 'note' for matches_known and unrelated_tp entries.
+
+issue: 5813
+known_bug:
+  title: "`JsonMapper` not thread-safe when using custom serializers"
+  url: "https://github.com/FasterXML/jackson-databind/issues/5813"
+  fix_commit: e755604df066dee43d277a9add9045e768cf08ae
+
+# matched_rank: position (1-indexed) of the first matches_known finding, or null.
+matched_rank: null
+
+labels:
+  # - index: 0
+  #   label: matches_known
+  #   note: "Identified the NPE in getX() when input is null"

@@ -1,0 +1,6 @@
+name: gobug-demo
+repo: null
+sha: ea862ec
+language: go
+adapter: go-test
+trusted: true

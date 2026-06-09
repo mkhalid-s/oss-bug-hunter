@@ -1,0 +1,4 @@
+# Pass-2 edge-case (fresh context). Explicitly evaluated the pass-1 ec-1
+# CollectionDeserializer object-id null path and OMITTED it as below the
+# bet-money bar ("plausibly a long-standing design difference"). No findings.
+findings: []

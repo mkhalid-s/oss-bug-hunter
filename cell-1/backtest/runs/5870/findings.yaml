@@ -1,0 +1,33 @@
+findings:
+  - summary: "withResolved compares _nullProvider against the deserializer arg instead of the nuller arg, dropping content-null overrides"
+    location: "src/main/java/com/fasterxml/jackson/databind/deser/std/EnumSetDeserializer.java:119-127"
+    type: "wrong-return"
+    evidence: |
+      public EnumSetDeserializer withResolved(JsonDeserializer<?> deser,
+              NullValueProvider nuller, Boolean unwrapSingle) {
+          if ((Objects.equals(_unwrapSingle, unwrapSingle))
+                  && (_enumDeserializer == deser)
+                  && (_nullProvider == deser)) {   // BUG: should be (_nullProvider == nuller)
+              return this;
+          }
+          return new EnumSetDeserializer(this, deser, nuller, unwrapSingle);
+      }
+      findContentNullProvider() returns the value deserializer itself (== deser) when no explicit
+      null handling is configured, so after the first contextualization _nullProvider == deser.
+      On a later contextualization with the SAME deser but a DIFFERENT nuller (e.g. a property with
+      @JsonSetter(contentNulls = Nulls.SKIP)), all three sub-conditions are true and the method
+      returns `this`, silently keeping the old _nullProvider and discarding the new `nuller`. The
+      intended comparison is `_nullProvider == nuller`.
+    reproducer_hint: "Contextualize the same EnumSet element deserializer for a property carrying @JsonSetter(contentNulls=SKIP) after a prior plain contextualization; the SKIP null handling is dropped."
+  - summary: "Error-path index uses EnumSet.size() instead of the array element index, reporting wrong location on failure"
+    location: "src/main/java/com/fasterxml/jackson/databind/deser/std/EnumSetDeserializer.java:250-252"
+    type: "edge-case"
+    evidence: |
+      } catch (Exception e) {
+          throw JsonMappingException.wrapWithPath(e, result, result.size());
+      }
+      `result` is an EnumSet; result.size() counts successfully-added DISTINCT elements, not the
+      index of the JSON array element being processed. Skipped nulls and duplicate enum values make
+      size() smaller than the actual array position, so the reported JsonMappingException path index
+      points at the wrong array element when an element after index 0 fails.
+    reproducer_hint: "Deserialize an EnumSet array containing an earlier duplicate or skipped-null element followed by an invalid enum token; the reported path index is too small."

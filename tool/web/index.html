@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>OSS Bug Hunter — Cell #1</title>
+  <link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+  <header>
+    <div>
+      <h1>OSS Bug Hunter <span class="cell">Cell #1</span></h1>
+      <div class="target">jackson-databind × correctness</div>
+    </div>
+    <div class="progress-wrap">
+      <div id="progress-text">…</div>
+      <div class="progress-bar"><div id="progress-fill"></div></div>
+    </div>
+  </header>
+
+  <main>
+    <section id="pipeline-panel">
+      <h2>Pipeline</h2>
+      <ul id="step-list"></ul>
+    </section>
+
+    <section id="detail-panel">
+      <div id="step-detail" class="empty">Select a step on the left for details.</div>
+      <div id="artifacts">
+        <h2>Artifacts</h2>
+        <div id="artifact-tabs"></div>
+        <pre id="artifact-content">Click an artifact to view.</pre>
+      </div>
+    </section>
+  </main>
+
+  <div id="toast"></div>
+  <script src="/static/app.js"></script>
+</body>
+</html>

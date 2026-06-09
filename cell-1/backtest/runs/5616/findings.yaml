@@ -1,0 +1,26 @@
+findings:
+  - summary: "unwrappingSerializer drops the requested name transformer when the content serializer does not itself change on unwrapping"
+    location: "src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java:132-147"
+    type: "wrong-return"
+    evidence: |
+      JsonSerializer<Object> valueSer = _valueSerializer;
+      if (valueSer != null) {
+          valueSer = valueSer.unwrappingSerializer(transformer);
+          if (valueSer == _valueSerializer) {
+              return this;   // returns unchanged instance
+          }
+      }
+      NameTransformer unwrapper = (_unwrapper == null) ? transformer
+              : NameTransformer.chainedTransformer(transformer, _unwrapper);
+      ...
+      return withResolved(_property, _valueTypeSerializer, valueSer, unwrapper);
+      The early `return this` at the inner `if` short-circuits BEFORE the incoming
+      `transformer` is ever chained into `_unwrapper`. When `_valueSerializer` is
+      statically known and its `unwrappingSerializer(transformer)` returns the same
+      instance (the common case for serializers that ignore unwrapping -- exactly the
+      situation the comment "Can not assume that serializer in question actually can
+      unwrap" warns about), the reference field is requested to be unwrapped with
+      `transformer`, but the returned serializer has no unwrapper applied. The name
+      transformation (e.g. a prefix/suffix from @JsonUnwrapped) is silently lost, so
+      the unwrapped content is emitted without the expected name transformation.
+    reproducer_hint: "Serialize a POJO with an @JsonUnwrapped(prefix=...) reference-type property (e.g. AtomicReference) whose statically-resolved content serializer returns itself from unwrappingSerializer; the prefix is not applied."

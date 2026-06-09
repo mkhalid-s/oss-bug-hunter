@@ -1,0 +1,22 @@
+# Pass-3 edge-case (fresh context). Did NOT re-find ec-1; surfaced a different
+# finding instead (only appears in this one pass).
+findings:
+  - summary: "Quoted integer string exceeding long range fails for Number.class instead of becoming BigInteger"
+    location: "src/main/java/com/fasterxml/jackson/databind/deser/std/NumberDeserializers.java:876-901"
+    type: "integer-overflow"
+    evidence: |
+      In NumberDeserializer.deserialize() String path, _isIntNumber(text) returns true for ANY
+      all-digit string (StdDeserializer._isIntNumber only checks chars are 0-9, ignoring magnitude).
+      When USE_BIG_INTEGER_FOR_INTS is disabled (the default), the code calls
+      NumberInput.parseLong(text) at line 882. For a 20+ digit integer this throws
+      NumberFormatException (an IllegalArgumentException), which is swallowed by the empty
+      `catch (IllegalArgumentException iae) {}` at line 899, falling through to
+      handleWeirdStringValue(..., "not a valid number"). The float-fallback branch at lines
+      890-898 is never reached because the int branch already entered the try and threw.
+      Yet the numeric-token path (lines 825-829) handles the same magnitude fine via
+      getNumberValue()/_coerceIntegral, so an unquoted JSON integer of that size succeeds while
+      the quoted-string form of the identical value is rejected.
+    reproducer_hint: |
+      // default ObjectMapper, no USE_BIG_INTEGER_FOR_INTS
+      Number n1 = mapper.readValue("12345678901234567890123", Number.class);   // OK -> BigInteger
+      Number n2 = mapper.readValue("\"12345678901234567890123\"", Number.class); // FAILS: "not a valid number"

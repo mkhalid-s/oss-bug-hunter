@@ -1,0 +1,6 @@
+name: jackson-databind
+repo: https://github.com/FasterXML/jackson-databind
+sha: 1c38a7d87
+language: java
+adapter: java-maven
+trusted: true

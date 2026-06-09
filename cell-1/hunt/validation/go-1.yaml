@@ -1,0 +1,27 @@
+finding_id: go-1
+angle: edge-case
+type: empty-input
+location: mathx.go:RunningMax
+summary: RunningMax([]) panics with index out of range on an empty slice (xs[0] before the loop)
+language: go
+target: gobug-demo
+evidence: |
+  RunningMax reads xs[0] before iterating; on an empty slice that panics
+  (index out of range [0] with length 0) instead of returning []. (Synthetic demo.)
+reproducer_hint: 'RunningMax([]int{}) should return an empty slice'
+dedup_auto: {osv_matches: [], github_matches: []}
+gates:
+  reproducer:
+    status: pass
+    path: cell-1/hunt/repros/go-1.go
+    backend: local
+    notes: REPRODUCES via go test (panic) on HEAD.
+  dedup: {is_duplicate: false, references: [], notes: synthetic demo finding}
+  cwe: {cwe: CWE-129, cvss: 'N/A', notes: improper validation of array index}
+  fix_passes_tests:
+    status: pass
+    patch_path: cell-1/hunt/patches/go-1.patch
+    backend: local
+    notes: len-guard fix makes the reproducer pass.
+final_status: validated
+self_consistency: {passes_total: 1, agreement: 1/1, survived: true}

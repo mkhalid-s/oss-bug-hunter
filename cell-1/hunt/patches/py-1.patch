@@ -1,0 +1,13 @@
+diff --git a/mathx.py b/mathx.py
+index efa29dd..f54d550 100644
+--- a/mathx.py
++++ b/mathx.py
+@@ -1,6 +1,8 @@
+ def running_max(nums):
+     """Running maximum at each position."""
+     out = []
++    if not nums:
++        return out
+     m = nums[0]
+     for n in nums:
+         if n > m:

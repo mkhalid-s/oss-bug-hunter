@@ -1,0 +1,10 @@
+issue: 5616
+known_bug:
+  title: "`ObjectWriter` serializes reference types (like `AtomicReference`, `Optional`) with subtypes incompletely"
+  url: "https://github.com/FasterXML/jackson-databind/issues/5616"
+  fix_commit: 944c77305c9bea17058e1f002feacf0aae4d5b4f
+matched_rank: null
+labels:
+  - index: 0
+    label: unrelated_tp
+    note: "Dropped unwrapping name-transformer is a real bug in ReferenceTypeSerializer (the fix file) but distinct from the reported incomplete-subtype serialization."

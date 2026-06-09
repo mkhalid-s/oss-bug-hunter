@@ -1,0 +1,590 @@
+# Backtest candidate pool — top 29, ranked by heuristic score.
+# Source: scripts/day2-build-dataset.py
+# Pick 10 (or accept dataset-autopick.yaml) and finalize as dataset.yaml.
+
+candidates:
+- issue_num: 5870
+  title: '`EnumMap` and `EnumSet` properties ignore `@JsonDeserialize(contentConverter)`'
+  url: https://github.com/FasterXML/jackson-databind/issues/5870
+  fix_commit: b77792a594d571867736156e245b4d147095d742
+  fix_subject: 'Fix #5870: support @JsonDeserialize(contentConverter) for EnumMap/EnumSet properties [2.21 backport] (#5878)'
+  parent_commit: 575f922a759066c6ccb99c42034ccf01d0dabb58
+  files_changed: 4
+  lines_added: 51
+  lines_removed: 0
+  files_touched:
+  - release-notes/VERSION-2.x
+  - src/main/java/com/fasterxml/jackson/databind/deser/std/EnumMapDeserializer.java
+  - src/main/java/com/fasterxml/jackson/databind/deser/std/EnumSetDeserializer.java
+  - src/test/java/com/fasterxml/jackson/databind/convert/ConvertingDeserializerTest.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 9.5
+- issue_num: 5851
+  title: Regression of `JsonTypeInfo.Id.MINIMAL_CLASS` in the 3.x branch
+  url: https://github.com/FasterXML/jackson-databind/issues/5851
+  fix_commit: e1247b0ee9741f6145b454d25ac1a266806ba3db
+  fix_subject: 'Fix #5851: regression wrt Type+Object Id handling (#5853)'
+  parent_commit: 8c6439de9732b134feb82452ba4da12525d6d365
+  files_changed: 2
+  lines_added: 18
+  lines_removed: 5
+  files_touched:
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 8.0
+- issue_num: 5840
+  title: Jackson 2.21 throws Conflicting property-based creators if both default (0-arg) and multi-arg constructor annotated
+  url: https://github.com/FasterXML/jackson-databind/issues/5840
+  fix_commit: 575f922a759066c6ccb99c42034ccf01d0dabb58
+  fix_subject: 'Fix [databind#5840]: @JsonCreator on 0-arg constructor conflicts with multi-arg @JsonCreator in 2.21 (#5846)'
+  parent_commit: aa6ee366c4d427ed05972f1cab1c2bf334a3560b
+  files_changed: 4
+  lines_added: 87
+  lines_removed: 6
+  files_touched:
+  - release-notes/CREDITS-2.x
+  - release-notes/VERSION-2.x
+  - src/main/java/com/fasterxml/jackson/databind/introspect/POJOPropertiesCollector.java
+  - src/test/java/com/fasterxml/jackson/databind/deser/creators/JsonCreatorDefaultAndPropertiesCtors5840Test.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 8.0
+- issue_num: 5819
+  title: '`JsonNodeFeature.STRIP_TRAILING_BIGDECIMAL_ZEROES` not working with `ObjectMapper.valueToTree()`'
+  url: https://github.com/FasterXML/jackson-databind/issues/5819
+  fix_commit: 87667cefc6625677e6827c6565500a2c3e88d395
+  fix_subject: 'One tweak wrt #5819 fix'
+  parent_commit: bc93f2410a6fb36946ad707067ab68c85af1ebf3
+  files_changed: 1
+  lines_added: 18
+  lines_removed: 2
+  files_touched:
+  - src/main/java/tools/jackson/databind/node/TreeBuildingGenerator.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 8.0
+- issue_num: 5813
+  title: '`JsonMapper` not thread-safe when using custom serializers'
+  url: https://github.com/FasterXML/jackson-databind/issues/5813
+  fix_commit: e755604df066dee43d277a9add9045e768cf08ae
+  fix_subject: '[databind#5813] Fix race condition in SerializerCache causing wrong converter to be used under concurrency
+    (#5822)'
+  parent_commit: cff32da7aede7ba0364f732e9ae1a542a18c756f
+  files_changed: 4
+  lines_added: 45
+  lines_removed: 20
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/ser/SerializerCache.java
+  - src/test/java/tools/jackson/databind/misc/ThreadSafetyWithConverterMixin5813Test.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 8.0
+- issue_num: 5734
+  title: '`DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES` treats absent field same as explicit `null`'
+  url: https://github.com/FasterXML/jackson-databind/issues/5734
+  fix_commit: 202c51f8d43e0c5504b446f02dad68f20fa4e43e
+  fix_subject: 'Fix #5734 (2nd attempt) (#5740)'
+  parent_commit: cfe49187fbdd84f2b068538929e493632586dd4b
+  files_changed: 4
+  lines_added: 78
+  lines_removed: 2
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/deser/jdk/NumberDeserializers.java
+  - src/test/java/tools/jackson/databind/deser/creators/CreatorNullPrimitivesTest.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 8.0
+- issue_num: 5616
+  title: '`ObjectWriter` serializes reference types (like `AtomicReference`, `Optional`) with subtypes incompletely'
+  url: https://github.com/FasterXML/jackson-databind/issues/5616
+  fix_commit: 944c77305c9bea17058e1f002feacf0aae4d5b4f
+  fix_subject: 'Backport #5616 fix (#5620)'
+  parent_commit: 8c8bd3dbc0ade33ed96b7432acdcdd150c793086
+  files_changed: 4
+  lines_added: 23
+  lines_removed: 2
+  files_touched:
+  - release-notes/CREDITS-2.x
+  - release-notes/VERSION-2.x
+  - src/main/java/com/fasterxml/jackson/databind/ser/std/ReferenceTypeSerializer.java
+  - src/test/java/com/fasterxml/jackson/databind/ser/jdk/AtomicTypeSerializationTest.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 8.0
+- issue_num: 5615
+  title: JsonMapper seems to be not thread-safe when using the polymorphic `JsonTypeInfo.As.PROPERTY` definition (and `@JsonIgnoreProperties`)
+  url: https://github.com/FasterXML/jackson-databind/issues/5615
+  fix_commit: f4ec2196dd9fe99185cfd5da8a6de84f5db538f1
+  fix_subject: 'One more fix wrt #5615 concurrency failures (#5835)'
+  parent_commit: 90087749d89cbac289a603be46745df6bb80a98a
+  files_changed: 1
+  lines_added: 12
+  lines_removed: 10
+  files_touched:
+  - src/main/java/tools/jackson/databind/util/internal/UnreflectHandleSupplier.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 8.0
+- issue_num: 5608
+  title: Confusing error-handling logic in `FunctionalScalarDeserializer` (Wrapped with exceptions)
+  url: https://github.com/FasterXML/jackson-databind/issues/5608
+  fix_commit: 540722065dabad138b41eeb4804bc896f31178d3
+  fix_subject: 'Fix for #5595 wrt #5608: support wrap-error config setting (#5610)'
+  parent_commit: 366f3ca05a3577a2ba1a3ad82876456d95f2693b
+  files_changed: 3
+  lines_added: 43
+  lines_removed: 11
+  files_touched:
+  - src/main/java/tools/jackson/databind/deser/jdk/FactoryBasedEnumDeserializer.java
+  - src/main/java/tools/jackson/databind/deser/std/FunctionalScalarDeserializer.java
+  - src/main/java/tools/jackson/databind/util/ExceptionUtil.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 8.0
+- issue_num: 5978
+  title: BuilderBasedDeserializer unwrapped update path still uses ignorable-only check
+  url: https://github.com/FasterXML/jackson-databind/issues/5978
+  fix_commit: a7f3d0ea323cba4c1152ff9a14696d597fa43122
+  fix_subject: 'Fix #5978; follow-up to #5749 which fixes #1075 (#5979)'
+  parent_commit: 4e70420b31c442be879bf051e6c1069d63259795
+  files_changed: 1
+  lines_added: 1
+  lines_removed: 1
+  files_touched:
+  - src/main/java/tools/jackson/databind/deser/bean/BuilderBasedDeserializer.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 7.0
+- issue_num: 5975
+  title: Parameters with an `ImplicitPropertyName` that matches the name of a property marked as `READ_ONLY` are ignored during
+    deserialization
+  url: https://github.com/FasterXML/jackson-databind/issues/5975
+  fix_commit: 4e70420b31c442be879bf051e6c1069d63259795
+  fix_subject: 'Fix #5975: read-/write-only props w/ implicit names (#5976)'
+  parent_commit: 6d028931a7f9a55e1603e310d6dfb6eb2830ca68
+  files_changed: 4
+  lines_added: 138
+  lines_removed: 1
+  files_touched:
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+  - src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
+  - src/test/java/tools/jackson/databind/deser/creators/CreatorParamShadowedByReadOnly5975Test.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 7.0
+- issue_num: 5923
+  title: Deserialization behavior change with Records, `@JsonCreator` and `@JsonValue`
+  url: https://github.com/FasterXML/jackson-databind/issues/5923
+  fix_commit: f23fb0bdc26a870a7800adebe23501c9b7560634
+  fix_subject: 'Backport #5923 fix from 3.x (#5926)'
+  parent_commit: e4beadbb7d1d4a1df93916d4a070b0c8216a72dc
+  files_changed: 5
+  lines_added: 107
+  lines_removed: 6
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+  - src/main/java/tools/jackson/databind/introspect/PotentialCreators.java
+  - src/test/java/tools/jackson/databind/records/RecordJsonCreatorAndJsonValue5923Test.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 7.0
+- issue_num: 5911
+  title: Deserialization failed with `@JsonUnwrapped` and `@JsonAlias`
+  url: https://github.com/FasterXML/jackson-databind/issues/5911
+  fix_commit: c7ac0c71d56182c23de8f27f864f88eadb737539
+  fix_subject: 'Backport #5911 fix in 3.1(.3) (#5942)'
+  parent_commit: ce0173ff0d9e5492509991a257feeee894751614
+  files_changed: 5
+  lines_added: 112
+  lines_removed: 0
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+  - src/main/java/tools/jackson/databind/deser/bean/BeanPropertyMap.java
+  - src/test/java/tools/jackson/databind/struct/UnwrappedWithAlias5911Test.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 7.0
+- issue_num: 5857
+  title: '`TypeFactory._fromParamType` `StackOverflowError` with mutually recursive generic bounds (regression in 3.1.0)'
+  url: https://github.com/FasterXML/jackson-databind/issues/5857
+  fix_commit: fd2789b3a839068d3900430632dc5772f9886f9e
+  fix_subject: 'Fix #5857: StackOverflowError in TypeFactory with mutually recursive generic wildcard bounds (#5858)'
+  parent_commit: 10fd8bb42833cdf9b522645a64320285a3e6023a
+  files_changed: 4
+  lines_added: 129
+  lines_removed: 10
+  files_touched:
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/type/TypeFactory.java
+  - src/test/java/tools/jackson/databind/type/RecursiveTypeTest.java
+  - src/test/java/tools/jackson/databind/type/TypeResolutionTest.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 7.0
+- issue_num: 5785
+  title: Wrong path in `InvalidFormatException` for nested fields and `BuilderBasedDeserializer`
+  url: https://github.com/FasterXML/jackson-databind/issues/5785
+  fix_commit: e263871863e1a33fbadf8f983153b901cb11a701
+  fix_subject: 'Fix #5785: wrong path in InvalidFormatException for nested fields and BuilderBasedDeserializer (#5784)'
+  parent_commit: 810603194b2e262a3c54379ce69e000b71c33a58
+  files_changed: 2
+  lines_added: 102
+  lines_removed: 1
+  files_touched:
+  - src/main/java/tools/jackson/databind/deser/bean/BuilderBasedDeserializer.java
+  - src/test/java/tools/jackson/databind/deser/builder/BuilderWithNestedFieldsTest.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 7.0
+- issue_num: 5683
+  title: When deserializing using `ObjectMapper::treeToValue`, NPE occurs when `JsonParser::readValueAs` is called
+  url: https://github.com/FasterXML/jackson-databind/issues/5683
+  fix_commit: 2674c1e34e4a92dbc0965e0c84fe8cc7c34b2683
+  fix_subject: 'Fix #5683 (#5689)'
+  parent_commit: 0fa05a07e5d5ae31c65d5a0eddf32e2245d49af5
+  files_changed: 5
+  lines_added: 75
+  lines_removed: 29
+  files_touched:
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/ObjectMapper.java
+  - src/main/java/tools/jackson/databind/ObjectReader.java
+  - src/test/java/tools/jackson/databind/records/RecordViaParser5683Test.java
+  - src/test/java/tools/jackson/databind/ser/filter/JsonIncludeForArray5515Test.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 7.0
+- issue_num: 5786
+  title: Regression in `TokenBuffer#forceUseOfBigDecimal`
+  url: https://github.com/FasterXML/jackson-databind/issues/5786
+  fix_commit: 220d3827a11405bd85826b071c384f7842653aa5
+  fix_subject: 'Fix #5786: Regression in `TokenBuffer.forceUseOfBigDecimal`'
+  parent_commit: 4802e5f59685a2c4191afb739cc75175af065627
+  files_changed: 4
+  lines_added: 44
+  lines_removed: 4
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/util/TokenBuffer.java
+  - src/test/java/tools/jackson/databind/util/TokenBufferTest.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: false
+  score: 6.0
+- issue_num: 5716
+  title: '`@JsonUnwrapped` properties moved to end in 3.1.0'
+  url: https://github.com/FasterXML/jackson-databind/issues/5716
+  fix_commit: 84d40f9fec2917f3fefec3773b0361b3fe4136ab
+  fix_subject: 'Fix #5716 (#5718)'
+  parent_commit: f3848cce27d5e65c9ebf4b5a684196fd0aef5598
+  files_changed: 5
+  lines_added: 83
+  lines_removed: 6
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+  - src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
+  - src/test/java/tools/jackson/databind/records/RecordUnwrappedOrdering5716Test.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: false
+  score: 6.0
+- issue_num: 5918
+  title: Creator properties always come first in 3.x
+  url: https://github.com/FasterXML/jackson-databind/issues/5918
+  fix_commit: ff362c019ae8a85d074143895a880335f3e5ae13
+  fix_subject: 'Fix #5918 for 3.2 (#5922)'
+  parent_commit: a7998cc9f989de2154150ab490b4c8c31257f1b0
+  files_changed: 4
+  lines_added: 44
+  lines_removed: 1
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/introspect/POJOPropertiesCollector.java
+  - src/test/java/tools/jackson/databind/ser/SerializationOrderTest.java
+  correctness: false
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 5.0
+- issue_num: 5897
+  title: Excessive `TokenBuffer` allocations when deserializing records
+  url: https://github.com/FasterXML/jackson-databind/issues/5897
+  fix_commit: a7998cc9f989de2154150ab490b4c8c31257f1b0
+  fix_subject: 'Fix #5897: skip TokenBuffer allocation for unknown properties in records (#5907)'
+  parent_commit: 9a7d8eb3e6ae7adba3470ed15a4f1b2361558640
+  files_changed: 6
+  lines_added: 157
+  lines_removed: 3
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+  - src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+  - src/main/java/tools/jackson/databind/deser/bean/BuilderBasedDeserializer.java
+  - src/test/java/tools/jackson/databind/records/RecordUnknownProps5897Test.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 5.0
+- issue_num: 5727
+  title: '`VisibilityChecker` overrides `equals()` without overriding `hashCode()`'
+  url: https://github.com/FasterXML/jackson-databind/issues/5727
+  fix_commit: 6ff0f656f2b27d189d69f28b0fddedcf1a01df69
+  fix_subject: 'Fix #5727 (#5747)'
+  parent_commit: 51f67a8d25ede07513cfc56934d8dd14cda60ff7
+  files_changed: 3
+  lines_added: 99
+  lines_removed: 2
+  files_touched:
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/introspect/VisibilityChecker.java
+  - src/test/java/tools/jackson/databind/introspect/VisibilityForSerializationTest.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: false
+  score: 5.0
+- issue_num: 5625
+  title: Custom `JsonTypeIdResolver` is not invoked when object is part of generic type
+  url: https://github.com/FasterXML/jackson-databind/issues/5625
+  fix_commit: 77fd8de4e3f720ae0dd6ac2c2c2e3b3e681e6eb2
+  fix_subject: Replace databind#XXXX references with databind#5625
+  parent_commit: 379284884aa361fb4a2444d48da6e825f01bc9ff
+  files_changed: 5
+  lines_added: 10
+  lines_removed: 10
+  files_touched:
+  - src/main/java/tools/jackson/databind/ser/BeanPropertyWriter.java
+  - src/main/java/tools/jackson/databind/ser/jdk/CollectionSerializer.java
+  - src/main/java/tools/jackson/databind/ser/jdk/IndexedListSerializer.java
+  - src/main/java/tools/jackson/databind/ser/jdk/MapSerializer.java
+  - src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java
+  correctness: false
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 5.0
+- issue_num: 5884
+  title: Exception when using `@JsonUnwrapped` alongside with `@JsonAlias` on another property
+  url: https://github.com/FasterXML/jackson-databind/issues/5884
+  fix_commit: 37e1424dadfc159becebcedf5cb1fb85496b17d0
+  fix_subject: 'Fix #5884: @JsonAlias, @JsonUnwrapped, conflict (#5885)'
+  parent_commit: b21e308cefd1c9ea8adc44a4565730973fd81605
+  files_changed: 4
+  lines_added: 91
+  lines_removed: 12
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/deser/bean/BeanPropertyMap.java
+  - src/test/java/tools/jackson/databind/struct/UnwrappedWithAlias5884Test.java
+  correctness: false
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 4.0
+- issue_num: 5710
+  title: '`ObjectWriter` transforms polymorphic types into a tree incompletely'
+  url: https://github.com/FasterXML/jackson-databind/issues/5710
+  fix_commit: 43f0ca35f7a7b893a337c17adad9889e7cab6cb6
+  fix_subject: 'Fix #5710: `ObjectWriter` transform polymorphic types into a tree incompletely (#5714)'
+  parent_commit: 2063e16f8dccb0feaa42265f27727454aa04b29f
+  files_changed: 4
+  lines_added: 101
+  lines_removed: 2
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/ObjectWriter.java
+  - src/test/java/tools/jackson/databind/ObjectWriterValueToTree5710Test.java
+  correctness: false
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 4.0
+- issue_num: 5729
+  title: ISO-8601 change prevents parsing negative timestamps (dates before 1970)
+  url: https://github.com/FasterXML/jackson-databind/issues/5729
+  fix_commit: 7e586a077858d15fec38e423503ef26262c42797
+  fix_subject: 'Fix #5729: signed numeric timestamps should not be treated as ISO-8601 (#5730)'
+  parent_commit: b0e304776ddd6dc23e87add568e2c02c3ee9f043
+  files_changed: 5
+  lines_added: 86
+  lines_removed: 0
+  files_touched:
+  - release-notes/CREDITS-2.x
+  - release-notes/VERSION-2.x
+  - src/main/java/com/fasterxml/jackson/databind/util/StdDateFormat.java
+  - src/test/java/com/fasterxml/jackson/databind/deser/jdk/DateDeserializationTest.java
+  - src/test/java/com/fasterxml/jackson/databind/util/StdDateFormatTest.java
+  correctness: false
+  feature: false
+  security: false
+  has_code_fence: false
+  score: 3.0
+- issue_num: 5570
+  title: Add `MapperFeature.WRAPPERS_DEFAULT_TO_NULL` to allow configuring `JsonInclude.Include.NON_DEFAULT` default for primitive
+    wrapper types to be `null`, not wrapped default of primitive
+  url: https://github.com/FasterXML/jackson-databind/issues/5570
+  fix_commit: ffb347eab3c69b8204c8dcdf8baa5824ae2b91a7
+  fix_subject: 'Fix #5570: primitive wrapper default values (#5571)'
+  parent_commit: 4cde71de6f76b78f09b4736a3c3d4fd88275f29d
+  files_changed: 17
+  lines_added: 279
+  lines_removed: 74
+  files_touched:
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/MapperFeature.java
+  - src/main/java/tools/jackson/databind/ser/BasicSerializerFactory.java
+  - src/main/java/tools/jackson/databind/ser/PropertyBuilder.java
+  - src/main/java/tools/jackson/databind/ser/jdk/MapEntrySerializer.java
+  - src/main/java/tools/jackson/databind/ser/jdk/MapSerializer.java
+  - src/main/java/tools/jackson/databind/ser/jdk/ObjectArraySerializer.java
+  - src/main/java/tools/jackson/databind/ser/jdk/StaticListSerializerBase.java
+  - src/main/java/tools/jackson/databind/ser/jdk/StringArraySerializer.java
+  - src/main/java/tools/jackson/databind/ser/std/ArraySerializerBase.java
+  - src/main/java/tools/jackson/databind/ser/std/AsArraySerializerBase.java
+  - src/main/java/tools/jackson/databind/ser/std/ReferenceTypeSerializer.java
+  - src/main/java/tools/jackson/databind/util/BeanUtil.java
+  - src/main/java/tools/jackson/databind/util/ClassUtil.java
+  - src/test/java/tools/jackson/databind/ser/filter/JsonIncludeTest.java
+  - src/test/java/tools/jackson/databind/util/BeanUtilTest.java
+  - src/test/java/tools/jackson/databind/util/ClassUtilTest.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 3.0
+- issue_num: 5745
+  title: Ability to change active JsonView on submodels (with `@JsonApplyView')
+  url: https://github.com/FasterXML/jackson-databind/issues/5745
+  fix_commit: 58cd0eb737e19e3a2cadc2a4a545197d64bb3e30
+  fix_subject: PR for using `@JsonApplyView` (#5745) (#5754)
+  parent_commit: 15b34c54e980ffb03af076cfdba9a0f1d8bb68de
+  files_changed: 8
+  lines_added: 307
+  lines_removed: 17
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/introspect/AnnotationIntrospectorPair.java
+  - src/main/java/tools/jackson/databind/introspect/BeanPropertyDefinition.java
+  - src/main/java/tools/jackson/databind/introspect/POJOPropertyBuilder.java
+  - src/main/java/tools/jackson/databind/ser/BeanPropertyWriter.java
+  - src/main/java/tools/jackson/databind/ser/PropertyBuilder.java
+  - src/test/java/tools/jackson/databind/views/ApplyViewSerializationTest.java
+  correctness: false
+  feature: false
+  security: false
+  has_code_fence: true
+  score: 2.0
+- issue_num: 5728
+  title: '`@JsonUnwrapped`doesn''t work for delegating ValueDeserializer (even one delegating to `BeanDeserializerBase`)'
+  url: https://github.com/FasterXML/jackson-databind/issues/5728
+  fix_commit: 0b0dca4611f4525e675d3472dc6297dd146bfc04
+  fix_subject: 'Fix #5728: @JsonUnwrapped with delegating deser (#5733)'
+  parent_commit: 94532410524e27bcb0c5fa3aa6f351d1298ce324
+  files_changed: 4
+  lines_added: 113
+  lines_removed: 2
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/deser/impl/UnwrappedPropertyHandler.java
+  - src/test/java/tools/jackson/databind/struct/UnwrappedWithDelegatingDeser5728Test.java
+  correctness: true
+  feature: true
+  security: false
+  has_code_fence: true
+  score: 2.0
+- issue_num: 5909
+  title: 'Forward Object Id references inside Collection properties leak Builder instance (follow-up to #1496)'
+  url: https://github.com/FasterXML/jackson-databind/issues/5909
+  fix_commit: aca9295618b06cd11e7c368208e3c6426a79a26c
+  fix_subject: 'Fix #5909: Forward Object Id references in Collection properties leak Builder instance (#5940)'
+  parent_commit: 5d094b3e704bb981b96dad7f20ebd618a3c6fba4
+  files_changed: 25
+  lines_added: 897
+  lines_removed: 159
+  files_touched:
+  - release-notes/CREDITS
+  - release-notes/VERSION
+  - src/main/java/tools/jackson/databind/DeserializationContext.java
+  - src/main/java/tools/jackson/databind/deser/BeanDeserializerBuilder.java
+  - src/main/java/tools/jackson/databind/deser/DeserializationContextExt.java
+  - src/main/java/tools/jackson/databind/deser/ReadableObjectId.java
+  - src/main/java/tools/jackson/databind/deser/SettableAnyProperty.java
+  - src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayBuilderDeserializer.java
+  - src/main/java/tools/jackson/databind/deser/bean/BeanAsArrayDeserializer.java
+  - src/main/java/tools/jackson/databind/deser/bean/BeanDeserializer.java
+  - src/main/java/tools/jackson/databind/deser/bean/BeanDeserializerBase.java
+  - src/main/java/tools/jackson/databind/deser/bean/BuilderBasedDeserializer.java
+  - src/main/java/tools/jackson/databind/deser/bean/PropertyBasedCreator.java
+  - src/main/java/tools/jackson/databind/deser/bean/PropertyValueBuffer.java
+  - src/main/java/tools/jackson/databind/deser/impl/ObjectIdReferenceProperty.java
+  - src/main/java/tools/jackson/databind/deser/impl/ObjectIdValueProperty.java
+  - src/main/java/tools/jackson/databind/deser/jdk/CollectionDeserializer.java
+  - src/main/java/tools/jackson/databind/deser/jdk/EnumMapDeserializer.java
+  - src/main/java/tools/jackson/databind/deser/jdk/FactoryBasedEnumDeserializer.java
+  - src/main/java/tools/jackson/databind/deser/jdk/MapDeserializer.java
+  - src/main/java/tools/jackson/databind/deser/jdk/ObjectArrayDeserializer.java
+  - src/test/java/tools/jackson/databind/deser/bean/BeanPropertyMapTest.java
+  - src/test/java/tools/jackson/databind/objectid/ObjectIdWithBuilder1496Test.java
+  - src/test/java/tools/jackson/databind/objectid/ObjectIdWithBuilder5909Test.java
+  - src/test/java/tools/jackson/databind/tofix/ObjectIdWithBuilder5909Test.java
+  correctness: true
+  feature: false
+  security: false
+  has_code_fence: true
+  score: -3.0

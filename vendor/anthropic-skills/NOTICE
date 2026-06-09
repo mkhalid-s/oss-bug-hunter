@@ -1,0 +1,12 @@
+OSS Bug Hunter — third-party notices for vendor/anthropic-skills/
+
+This directory bundles software developed by Anthropic PBC:
+
+  defending-code-reference-harness
+  https://github.com/anthropics/defending-code-reference-harness
+  Copyright 2026 Anthropic PBC
+  Licensed under the Apache License, Version 2.0 (see ./LICENSE).
+
+The contents of ./skills/ are vendored from that repository's `.claude/skills/`
+tree (cloned 2026-06-09). Files are copied verbatim except where a change is
+recorded in ./README.md; any such modifications are likewise under Apache-2.0.

@@ -1,0 +1,10 @@
+issue: 5734
+known_bug:
+  title: "`DeserializationFeature.FAIL_ON_NULL_FOR_PRIMITIVES` treats absent field same as explicit `null`"
+  url: "https://github.com/FasterXML/jackson-databind/issues/5734"
+  fix_commit: 202c51f8d43e0c5504b446f02dad68f20fa4e43e
+matched_rank: null
+labels:
+  - index: 0
+    label: unrelated_tp
+    note: "ByteDeserializer using _shortOverflow instead of _byteOverflow is a real bug in NumberDeserializers (the fix file) but unrelated to the FAIL_ON_NULL_FOR_PRIMITIVES absent-vs-null semantics this issue reports."

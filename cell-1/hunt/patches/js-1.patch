@@ -1,0 +1,13 @@
+diff --git a/mathx.js b/mathx.js
+index a961379..803ef91 100644
+--- a/mathx.js
++++ b/mathx.js
+@@ -1,6 +1,7 @@
+ export function runningMax(xs) {
+   const out = [];
+-  let m = 0;            // BUG: should seed from xs[0]; wrong for all-negative input
++  if (xs.length === 0) return out;
++  let m = xs[0];
+   for (const n of xs) {
+     if (n > m) m = n;
+     out.push(m);

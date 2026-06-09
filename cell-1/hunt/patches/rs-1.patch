@@ -1,0 +1,14 @@
+diff --git a/src/lib.rs b/src/lib.rs
+index 009f747..08256a7 100644
+--- a/src/lib.rs
++++ b/src/lib.rs
+@@ -1,6 +1,9 @@
+ /// Running maximum at each position.
+ pub fn running_max(xs: &[i32]) -> Vec<i32> {
+     let mut out = Vec::new();
++    if xs.is_empty() {
++        return out;
++    }
+     let mut m = xs[0];
+     for &n in xs {
+         if n > m {

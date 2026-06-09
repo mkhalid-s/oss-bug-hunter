@@ -1,0 +1,13 @@
+issue: 5615
+known_bug:
+  title: "JsonMapper seems to be not thread-safe when using the polymorphic `JsonTypeInfo.As.PROPERTY` definition (and `@JsonIgnoreProperties`)"
+  url: "https://github.com/FasterXML/jackson-databind/issues/5615"
+  fix_commit: f4ec2196dd9fe99185cfd5da8a6de84f5db538f1
+matched_rank: 1
+labels:
+  - index: 0
+    label: matches_known
+    note: "Missing-volatile data race on the memoized MethodHandle in UnreflectHandleSupplier IS the thread-safety defect this issue reports (same file the fix touched)."
+  - index: 1
+    label: unrelated_tp
+    note: "toString() NPE on null handle is a real but distinct defect, not the reported thread-safety bug."

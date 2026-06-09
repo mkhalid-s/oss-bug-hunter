@@ -1,0 +1,23 @@
+findings:
+  - summary: "External type id value is also deserialized into the regular property because handleTypePropertyValue's return is ignored (missing `continue`)"
+    location: "src/main/java/tools/jackson/databind/deser/bean/BuilderBasedDeserializer.java:937-947"
+    type: "wrong-return"
+    evidence: |
+      Builder code:
+        JsonToken t = p.nextToken();
+        if (t.isScalarValue()) {
+            ext.handleTypePropertyValue(p, ctxt, p.currentName(), bean);
+        }
+        if (activeView != null && !prop.visibleInView(activeView)) { ... }
+        bean = prop.deserializeSetAndReturn(p, ctxt, bean);
+      The reference BeanDeserializer (_deserializeWithExternalTypeId) instead does:
+        if (t.isScalarValue() && ext.handleTypePropertyValue(p, ctxt, p.currentName(), bean)) {
+            continue;
+        }
+      ExternalTypeHandler._handleTypePropertyValue returns true (= "skip setting on bean")
+      whenever the type id property is not visible (the normal case). The builder version
+      drops that return and falls through to prop.deserializeSetAndReturn, which then tries
+      to bind the type-id scalar string into the regular (typically non-String / typed)
+      property - producing a wrong value or a deserialization failure, and double-handling
+      the discriminator.
+    reproducer_hint: "Builder-based POJO with a property using @JsonTypeInfo(include=EXTERNAL_PROPERTY) and a non-visible external type-id property; deserialize JSON where the type-id scalar precedes/coincides with that property."

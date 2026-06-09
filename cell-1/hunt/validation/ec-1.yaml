@@ -1,0 +1,47 @@
+finding_id: ec-1
+angle: edge-case
+summary: Object-Id collection path adds JSON null directly to a null-hostile collection, bypassing the _tryToAddNull NPE-guard used by all sibling paths
+location: src/main/java/com/fasterxml/jackson/databind/deser/std/CollectionDeserializer.java:464-479
+type: empty-collection
+evidence: "In _deserializeWithObjectId, a VALUE_NULL element resolves to:\n    if (value == null) {\n        value = _nullProvider.getNullValue(ctxt);\n        if (value == null && _skipNullValues) {\n            continue;\n        }\n    }\n    referringAccumulator.add(value);   // value may be null here\nWhen _skipNullValues is false and the null provider yields null, the null\nis passed to CollectionReferringAccumulator.add(), which does\n`_result.add(value)` (line 594) -> a raw add(null). Every other element path\nin this class (_deserializeFromArray line 366, handleNonArray line 430,\n_wrapSingleWithObjectId line 517) routes a leftover null through\n`_tryToAddNull(...)`, which catches the NullPointerException thrown by\nnull-hostile collections (e.g. TreeSet) and reports a friendly\nhandleUnexpectedToken message instead. The Object-Id path omits this guard,\nso the same input throws an unhandled/raw NPE only when the collection\nelements carry Object Ids.\n"
+reproducer_hint: '// Set<Node> where Node has @JsonIdentityInfo, backing collection is a TreeSet
+
+  // (which rejects null). Input contains a null element among id-bearing objects:
+
+  String json = "[{\"@id\":1,\"v\":\"a\"}, null]";
+
+  mapper.readValue(json, new TypeReference<TreeSet<Node>>(){});
+
+  // with @JsonIdentityInfo present, _deserializeWithObjectId runs and add(null) throws raw NPE.
+
+  '
+dedup_auto:
+  osv_matches: []
+  github_matches: []
+gates:
+  reproducer:
+    status: pass
+    path: cell-1/hunt/repros/ec-1.java
+    backend: local
+    notes: 'REPRODUCES on HEAD 1c38a7d8 (2026-06-06, local backend, no Docker). Repro_ec_1 run isolated via JUnit Platform Console Launcher (jackson pins <test>PrimarySuite</test> so -Dtest is ignored). Test FAILS: JsonMappingException (was java.lang.NullPointerException) through TreeSet[1] — CollectionDeserializer._deserializeWithObjectId:488 -> CollectionReferringAccumulator.add:594 -> TreeSet.add -> Objects.requireNonNull. Confirms the raw-NPE bug.'
+  dedup:
+    is_duplicate: null
+    references: []
+    notes: No OSV/GitHub candidates found by auto-dedup — likely not a duplicate; confirm and set is_duplicate.
+  cwe:
+    cwe: CWE-476
+    cvss: N/A
+    notes: Auto-suggested from finding type 'empty-collection'. CVSS N/A for correctness; confirm/correct the CWE.
+  fix_passes_tests:
+    status: pass
+    patch_path: cell-1/hunt/patches/ec-1.patch
+    backend: local
+    notes: 'FIX WORKS (2026-06-06, local backend). Patch applies clean to HEAD 1c38a7d8; after `mvn -o compile` + recompile, the isolated Repro_ec_1 PASSES (1 tests successful, 0 failed). The patch routes the leftover null through _tryToAddNull, producing the friendly MismatchedInputException the test expects. Worktree restored to pristine afterward.'
+final_status: failed-self-consistency
+self_consistency:
+  passes_total: 3
+  agreement: 1/3
+  matched_in: []
+  survived: false
+  pass2_match_summary: null
+  pass3_match_summary: null
