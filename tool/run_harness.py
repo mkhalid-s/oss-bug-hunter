@@ -88,7 +88,8 @@ def pristine(worktree: str) -> None:
     subprocess.run(["git", "-C", worktree, "reset", "--hard", "-q"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["git", "-C", worktree, "clean", "-fdq", "-e", ".m2",
-                    "-e", ".repro-worktree.lock"],
+                    "-e", ".repro-worktree.lock", "-e", ".oss-venv",
+                    "-e", ".oss-bootstrap.json", "-e", "node_modules"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
 
 
@@ -173,7 +174,8 @@ def _adapter_run(backend, ad, worktree, selector, *, network, log, name):
     the worktree at /work, and run the in-container argv there."""
     abs_wt = os.path.abspath(worktree)
     if backend.name == "local":
-        return _capture(backend, ad.test_argv(selector), cwd=abs_wt, network=network,
+        # pass the worktree so a Python adapter uses its per-target .oss-venv (M5) when present.
+        return _capture(backend, ad.test_argv(selector, abs_wt), cwd=abs_wt, network=network,
                         env=dict(os.environ), log=log, offline=(network == "none"), name=name)
     # untrusted/container path
     log(f"[harness] building sandbox image {ad.image} ({backend.name})…")
@@ -325,6 +327,24 @@ def _contained_generic(worktree: str, patch_abs: str, allowed, denied):
     return True, ""
 
 
+def _maybe_bootstrap(ad, worktree, *, log):
+    """M5 (#48): resolve the target's deps once (idempotent) before the first test.
+    Returns a DEP_ERROR verdict if bootstrap fails, else None (proceed). Local-backend
+    bootstrap today (container bootstrap is a follow-on); single-file targets are a no-op.
+    pristine() preserves the resulting .oss-venv/node_modules across runs."""
+    try:
+        import bootstrap as _bs
+        if not _bs.needs_bootstrap(worktree, ad):
+            return None
+        r = _bs.bootstrap(worktree, ad, network="bridge", log=log)
+        if not r.get("ok"):
+            return TestVerdict(Outcome.DEP_ERROR, 0, 0, 0, 0,
+                               f"env-bootstrap failed at {r.get('step')}")
+    except Exception as e:
+        log(f"[harness] bootstrap skipped ({e})")
+    return None
+
+
 def _adapter_validate_repro(backend, worktree, test_file, *, lang, network, log):
     ad = adapters.get_adapter(lang)
     if ad is None:
@@ -332,6 +352,9 @@ def _adapter_validate_repro(backend, worktree, test_file, *, lang, network, log)
     cwd = os.path.abspath(worktree)
     with worktree_lock(worktree):
         pristine(worktree)
+        berr = _maybe_bootstrap(ad, worktree, log=log)
+        if berr is not None:
+            return berr
         try:
             selector = ad.place_reproducer(worktree, test_file, Path(test_file).stem)
             log(f"[harness] {lang}: running {selector}")
@@ -353,6 +376,9 @@ def _adapter_validate_fix(backend, worktree, test_file, patch, *, lang, network,
     patch_abs = os.path.abspath(patch)
     with worktree_lock(worktree):
         pristine(worktree)
+        berr = _maybe_bootstrap(ad, worktree, log=log)
+        if berr is not None:
+            return berr
         ok, reason = _contained_generic(worktree, patch_abs, ad.patch_allowed, ad.patch_denied)
         if not ok:
             log(f"[harness] patch REJECTED: {reason}")

@@ -870,3 +870,46 @@ def test_fix_builder_provider_retry(tmp_path):
                              _runner=_fake_claude(_DIFF))
     p = prov("prev failure", 2)
     assert p == str(tmp_path / "vs-9-retry2.patch") and "mathx.py" in Path(p).read_text()
+
+
+# ---- M5 #46: adapter bootstrap interface (manifest detect + steps + per-target venv) ----
+def test_bootstrap_steps_empty_without_manifest(tmp_path):
+    for lang in ("python", "go", "rust", "javascript"):
+        assert _adapters.get_adapter(lang).bootstrap_steps(str(tmp_path)) == []
+
+
+def test_bootstrap_steps_per_language(tmp_path):
+    (tmp_path / "go.mod").write_text("module x\n")
+    assert _adapters.get_adapter("go").bootstrap_steps(str(tmp_path)) == [["go", "mod", "download"]]
+    (tmp_path / "Cargo.toml").write_text("[package]\n")
+    assert _adapters.get_adapter("rust").bootstrap_steps(str(tmp_path)) == [["cargo", "fetch"]]
+    (tmp_path / "package-lock.json").write_text("{}")
+    assert _adapters.get_adapter("javascript").bootstrap_steps(str(tmp_path)) == [["npm", "ci"]]
+
+
+def test_python_bootstrap_uses_uv(tmp_path):
+    (tmp_path / "pyproject.toml").write_text("[project]\nname='x'\n")
+    steps = _adapters.get_adapter("python").bootstrap_steps(str(tmp_path))
+    assert steps[0][:2] == ["uv", "venv"] and steps[1][:4] == ["uv", "pip", "install", "-e"]
+    assert "--python" in steps[1]
+    # requirements path
+    wt2 = tmp_path / "r"; wt2.mkdir(); (wt2 / "requirements.txt").write_text("pytest\n")
+    rs = _adapters.get_adapter("python").bootstrap_steps(str(wt2))
+    assert rs[0][:2] == ["uv", "venv"] and rs[1][:4] == ["uv", "pip", "install", "-r"]
+
+
+def test_python_test_argv_uses_venv_when_present(tmp_path):
+    a = _adapters.get_adapter("python")
+    assert a.test_argv("t.py")[0] == sys.executable                  # no worktree → harness python
+    assert a.test_argv("t.py", str(tmp_path))[0] == sys.executable   # no venv yet → harness python
+    vpy = tmp_path / ".oss-venv" / "bin" / "python"
+    vpy.parent.mkdir(parents=True); vpy.write_text("")
+    assert a.test_argv("t.py", str(tmp_path))[0] == str(vpy)         # venv present → venv python
+
+
+def test_containment_denies_bootstrap_dirs():
+    js = _adapters.get_adapter("javascript")
+    assert any(d.search("node_modules/dep/i.js") for d in js.patch_denied)   # vendored deps unpatchable
+    py = _adapters.get_adapter("python")
+    assert any(d.search(".oss-venv/lib/x.py") for d in py.patch_denied)
+    assert any(d.search(".oss-bootstrap.json") for d in py.patch_denied)

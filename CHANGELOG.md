@@ -365,6 +365,26 @@ missed.
   to a live run (environmental, not structural): M5 env-bootstrap (#46-49) for multi-dep
   repos (single-dep runs today with the no-op bootstrap), the LLM calls need the model +
   a host, heavy/native repos need a capable host. See §11.26.
+- **M5 env-bootstrap #46 — adapter bootstrap interface (`tool/adapters.py`)**: each
+  adapter declares `MANIFESTS` + `bootstrap_steps(worktree)` (deps-resolution commands;
+  `[]` for single-file targets). Python uses a per-target **`uv` venv** (`.oss-venv`;
+  `uv venv` + `uv pip install -e .`/`-r` — uv because 3.13 venvs here lack setuptools/
+  ensurepip) and a **venv-aware `test_argv`** (runs pytest in the target's venv when
+  present); `run_harness._adapter_run` now passes the worktree. Go → `go mod download`,
+  Rust → `cargo fetch`, JS → `npm ci`/`install`. Containment denies `.oss-venv`/
+  `node_modules`/the bootstrap marker in fixes. +5 tests → **287**. Next M5:
+  `tool/bootstrap.py` (run steps idempotently, cached + network policy, #47), wire as an
+  orchestrate pre-step (#48), prove on a synthetic multi-dep target (#49).
+- **M5 #47/#48 — env-bootstrap runner + wiring (`tool/bootstrap.py` + run_harness)**:
+  `bootstrap()` runs an adapter's `bootstrap_steps` once, IDEMPOTENTLY (a
+  `.oss-bootstrap.json` marker keyed on the manifest hash → unchanged target skipped),
+  via an injectable `run_step` (default local subprocess), bridge network. Wired as a
+  `_maybe_bootstrap` pre-step in `_adapter_validate_repro`/`_fix` (after `pristine`,
+  which now PRESERVES `.oss-venv`/`node_modules`/the marker); a failed bootstrap →
+  `DEP_ERROR`. +7 tests, and the go/rust/js synthetic e2e now exercise the **real**
+  bootstrap (`go mod download`/`cargo fetch`/`npm install` fired + marked `ok`,
+  daemonless, no regression) → **suite 294**. Remaining M5: #49 (a Python multi-dep
+  target where `uv pip install -e .` is LOAD-BEARING — the test fails without it).
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 

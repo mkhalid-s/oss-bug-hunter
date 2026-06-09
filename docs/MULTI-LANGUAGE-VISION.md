@@ -951,6 +951,24 @@ with the no-op bootstrap); the LLM calls (hunt scan + fix builder) need the mode
 host; heavy/native repos need a capable host (the headroom lesson). On such a host,
 `pipeline.py schedule --run` executes the full chain — L3→L4, reachable now.
 
+### 11.27 M5 mechanism — env-bootstrap runner + wiring, proven firing (2026-06-09)
+`tool/bootstrap.py` (#47) runs an adapter's `bootstrap_steps` once, idempotently (a
+`.oss-bootstrap.json` marker keyed on the manifest hash skips an unchanged target), via
+an injectable `run_step` (default local subprocess), bridge network policy. Wired (#48)
+as a `_maybe_bootstrap` pre-step in the adapter validate paths — after `pristine()`,
+which now PRESERVES `.oss-venv`/`node_modules`/the marker across runs; a failed bootstrap
+returns a `DEP_ERROR` verdict. Adapter interface (#46): `MANIFESTS` + `bootstrap_steps`
+per language; Python uses a per-target `uv` venv + venv-aware `test_argv`.
+
+**Proven firing on the live engine:** the existing go/rust/js synthetic e2e tests now run
+the REAL bootstrap (`go mod download` / `cargo fetch` / `npm install`) — markers written
+`status: ok`, daemonless, no regression (**294 tests**). These are no-dep targets so
+bootstrap is a fast near-no-op; the LOAD-BEARING proof (a Python src-layout package where
+`uv pip install -e .` is REQUIRED for the reproducer to import) is #49. With M5, the
+§12.5 scheduler's `bootstrap` step is real for the four adapter languages — the last
+structural gate to multi-dep autonomous runs (modulo environmental network/host realities,
+e.g. the proxy-CA wall the headroom pilot hit).
+
 ---
 
 ## 12. Autonomy roadmap — toward unattended OSS bug-hunting (PROPOSED)

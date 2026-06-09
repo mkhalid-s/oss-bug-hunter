@@ -53,10 +53,13 @@ class PythonPytestAdapter:
     patch_allowed = [re.compile(r"\.py$")]
     patch_denied = [re.compile(
         r"(^|/)(pyproject\.toml|setup\.py|setup\.cfg|requirements[^/]*\.txt|"
-        r"tox\.ini|Pipfile|Pipfile\.lock|poetry\.lock|conftest\.py|\.github/)")]
+        r"tox\.ini|Pipfile|Pipfile\.lock|poetry\.lock|conftest\.py|\.github/|"
+        r"\.oss-venv/|\.oss-bootstrap\.json)")]
     # container backend (untrusted targets): a small image with pytest preinstalled.
     image = "oss-bug-hunter-py:latest"
     image_dir = str(_ROOT / "tool" / "repro-py")
+    VENV_DIR = ".oss-venv"                               # M5: per-target uv venv
+    MANIFESTS = ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt")
 
     def place_reproducer(self, worktree: str, test_src: str, name: str) -> str:
         """Copy the reproducer into the repo root where pytest collects it.
@@ -65,10 +68,30 @@ class PythonPytestAdapter:
         shutil.copy(test_src, Path(worktree) / fn)
         return fn
 
-    def test_argv(self, selector: str) -> list:
-        # LOCAL: sys.executable = the env running the harness (has pytest). A real
-        # multi-dep target would get a per-target venv (the documented setup step).
-        return [sys.executable, "-m", "pytest", selector, "-q",
+    def venv_python(self, worktree) -> str | None:
+        p = Path(worktree) / self.VENV_DIR / "bin" / "python"
+        return str(p) if p.exists() else None
+
+    def bootstrap_steps(self, worktree) -> list:
+        """M5: uv-based per-target venv + (editable | requirements) install. Returns []
+        when no manifest is present (our single-file synthetic targets need nothing).
+        uv is used because Python 3.13 venvs here lack setuptools/ensurepip."""
+        wt = Path(worktree)
+        py = str(wt / self.VENV_DIR / "bin" / "python")
+        if any((wt / m).exists() for m in ("pyproject.toml", "setup.py", "setup.cfg")):
+            return [["uv", "venv", str(wt / self.VENV_DIR)],
+                    ["uv", "pip", "install", "-e", ".", "--python", py]]
+        reqs = sorted(p.name for p in wt.glob("requirements*.txt"))
+        if reqs:
+            return [["uv", "venv", str(wt / self.VENV_DIR)]] + \
+                   [["uv", "pip", "install", "-r", r, "--python", py] for r in reqs]
+        return []
+
+    def test_argv(self, selector: str, worktree=None) -> list:
+        # use the per-target bootstrap venv (with the target's deps) when present;
+        # else sys.executable (the harness env, fine for single-file synthetic targets).
+        py = (self.venv_python(worktree) if worktree else None) or sys.executable
+        return [py, "-m", "pytest", selector, "-q",
                 "-p", "no:cacheprovider", "--no-header"]
 
     def container_argv(self, selector: str) -> list:
@@ -112,6 +135,10 @@ class GoTestAdapter:
     _TESTFUNC = re.compile(r"func\s+(Test[A-Za-z0-9_]*)\s*\(")
     image = "oss-bug-hunter-go:latest"
     image_dir = str(_ROOT / "tool" / "repro-go")
+    MANIFESTS = ("go.mod",)
+
+    def bootstrap_steps(self, worktree) -> list:
+        return [["go", "mod", "download"]] if (Path(worktree) / "go.mod").exists() else []
 
     def place_reproducer(self, worktree: str, test_src: str, name: str) -> str:
         body = Path(test_src).read_text()
@@ -120,7 +147,7 @@ class GoTestAdapter:
         (Path(worktree) / fn).write_text(body)
         return m.group(1) if m else "."
 
-    def test_argv(self, selector: str) -> list:
+    def test_argv(self, selector: str, worktree=None) -> list:
         # `.` (the root package the reproducer is placed in), NOT `./...`: a build
         # error in an UNRELATED package must not mask this reproducer's verdict.
         run = f"^{selector}$" if selector and selector != "." else "."
@@ -154,6 +181,10 @@ class RustCargoAdapter:
     patch_denied = [re.compile(r"(^|/)(Cargo\.toml|Cargo\.lock|\.github/)")]
     image = "oss-bug-hunter-rust:latest"
     image_dir = str(_ROOT / "tool" / "repro-rust")
+    MANIFESTS = ("Cargo.toml",)
+
+    def bootstrap_steps(self, worktree) -> list:
+        return [["cargo", "fetch"]] if (Path(worktree) / "Cargo.toml").exists() else []
 
     def place_reproducer(self, worktree: str, test_src: str, name: str) -> str:
         # integration test: tests/<stem>.rs (a separate crate using the public API).
@@ -163,7 +194,7 @@ class RustCargoAdapter:
         shutil.copy(test_src, d / f"{stem}.rs")
         return stem                                   # selector = the test binary name
 
-    def test_argv(self, selector: str) -> list:
+    def test_argv(self, selector: str, worktree=None) -> list:
         return ["cargo", "test", "--test", selector]
 
     def container_argv(self, selector: str) -> list:  # cargo is on PATH in rust image
@@ -192,9 +223,16 @@ class JsNodeTestAdapter:
     # a fix may edit any JS/TS source; never the manifest/lockfiles or CI config.
     patch_allowed = [re.compile(r"\.(m?js|cjs|jsx|ts|tsx)$")]
     patch_denied = [re.compile(r"(^|/)(package\.json|package-lock\.json|yarn\.lock|"
-                               r"pnpm-lock\.yaml|\.github/)")]
+                               r"pnpm-lock\.yaml|node_modules/|\.github/)")]
     image = "oss-bug-hunter-js:latest"
     image_dir = str(_ROOT / "tool" / "repro-js")
+    MANIFESTS = ("package-lock.json", "package.json")
+
+    def bootstrap_steps(self, worktree) -> list:
+        wt = Path(worktree)
+        if (wt / "package-lock.json").exists():
+            return [["npm", "ci"]]
+        return [["npm", "install"]] if (wt / "package.json").exists() else []
 
     def place_reproducer(self, worktree: str, test_src: str, name: str) -> str:
         # node's built-in runner; ESM .js (target package.json should be type:module).
@@ -202,7 +240,7 @@ class JsNodeTestAdapter:
         shutil.copy(test_src, Path(worktree) / fn)
         return fn
 
-    def test_argv(self, selector: str) -> list:
+    def test_argv(self, selector: str, worktree=None) -> list:
         return ["node", "--test", "--test-reporter=tap", selector]
 
     def container_argv(self, selector: str) -> list:   # node is on PATH in the image
