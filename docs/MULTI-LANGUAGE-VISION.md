@@ -893,6 +893,26 @@ loop now works for all five languages** (Java · Python · Go · Rust · JS), an
 Anthropic-skills funnel is closed end-to-end: ingest → verify (reproduced) → fix
 (fixed). Next: Phase 3 — the outer loop (discovery → scheduler → gated-PR, §12).
 
+### 11.24 Phase 3 — outer-loop seams: §12.6 gated-PR draft + §12.3 discovery (2026-06-09)
+Two outer-loop seams built, reviewed, and committed (`aef6700` init; `923c138` §12.6).
+**§12.6 gated-PR draft (DONE):** `tool/pr_draft.py` + REST (`/api/pr-drafts[/{id}[/decide]]`)
++ CLI (`pr-draft`/`pr-drafts`/`pr-decide`) + a React **Review** tab — a `fixed` keeper
+becomes a persisted, reviewable draft; human approve/reject; **never pushes** (the human
+runs the draft's identity-gated `manual_steps`). **§12.3 discovery (DONE):**
+`tool/discovery.py` — pluggable sources (hermetic `JsonSource`; injectable
+`GitHubSearchSource`) → dedup → filter → **hard eligibility gate** (adapter-supported
+language + not native-heavy/oversize/archived — the headroom lesson, enforced as a gate
+not a rescuable score term) → transparent non-AI score → rank → cap → `enqueue` a
+scheduler-ready queue; CLI `discover`; never clones/runs/pushes. Each was agent-reviewed
++ reiterated (§12.6: honest closure correction; §12.3: P0 hard-gate, P1 cross-transport
+dedup + the `GH_TOKEN`/enterprise public-search hazard, P2 robustness). **269 tests.**
+
+The per-finding chain is now **ingest → reproduced → fixed → reviewable draft**, and
+discovery proposes the INPUT — but **nothing yet *consumes* the discovery queue**: the
+**§12.5 scheduler** (discover → clone via `targets.add_target` → hunt → fix → draft,
+budgeted + audited) is the next piece. Deferred follow-ons: GitHub enrichment of
+`has_tests`/`native_heavy` (a contents/code-search probe) and per-source rate-limiting.
+
 ---
 
 ## 12. Autonomy roadmap — toward unattended OSS bug-hunting (PROPOSED)

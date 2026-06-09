@@ -1355,6 +1355,14 @@ def _cli(argv: list[str] | None = None) -> int:
     pdd.add_argument("decision", choices=["approved", "rejected"])
     pdd.add_argument("--note", default=None)
 
+    dsc = sub.add_parser("discover", help="Rank candidate OSS repos to hunt (non-AI) from a JSON file and/or GitHub search; optionally enqueue for the scheduler.")
+    dsc.add_argument("--json", default=None, help="JSON file of candidate repos (list or {candidates:[...]})")
+    dsc.add_argument("--github", default=None, help="GitHub repo-search query (NETWORK), e.g. 'language:go stars:>500'")
+    dsc.add_argument("--limit", type=int, default=20)
+    dsc.add_argument("--deny", nargs="*", default=[], help="owner/name repos to skip")
+    dsc.add_argument("--allow", nargs="*", default=None, help="restrict to these owners or owner/name repos")
+    dsc.add_argument("--enqueue", action="store_true", help="persist the ranked queue for the scheduler")
+
     args = p.parse_args(argv)
 
     if args.cmd == "status":
@@ -1410,6 +1418,24 @@ def _cli(argv: list[str] | None = None) -> int:
     elif args.cmd == "pr-decide":
         import pr_draft as _pd
         result = _pd.decide_draft(args.finding_id, args.decision, note=args.note)
+    elif args.cmd == "discover":
+        import discovery as _disc
+        srcs = []
+        if args.json:
+            srcs.append(_disc.JsonSource(args.json))
+        if args.github:
+            srcs.append(_disc.GitHubSearchSource(args.github))
+        if not srcs:
+            result = {"ok": False, "error": "provide --json <file> and/or --github <query>"}
+        else:
+            try:
+                cands = _disc.discover(srcs, limit=args.limit, denylist=args.deny,
+                                       allowlist=args.allow, log=lambda m: print(m, file=sys.stderr))
+                result = {"ok": True, "count": len(cands), "candidates": cands}
+                if args.enqueue:
+                    result["enqueued"] = _disc.enqueue(cands)
+            except (FileNotFoundError, ValueError) as e:   # bad --json path / malformed JSON
+                result = {"ok": False, "error": f"discovery source failed: {e}"}
     else:  # pragma: no cover - argparse enforces choices
         result = {"ok": False, "error": f"unknown command {args.cmd!r}"}
 

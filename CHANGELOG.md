@@ -331,6 +331,18 @@ missed.
   refused with blockers). Local branch-assembly deliberately deferred — kept the
   read-only posture (the human runs the draft's `manual_steps`). Next: §12.3
   discovery + §12.5 scheduler.
+- **Phase 3 §12.3 — candidate discovery + ranking (`tool/discovery.py`)**: the
+  outer-loop INPUT. Pluggable sources (hermetic `JsonSource`; injectable-fetch
+  `GitHubSearchSource`) → dedup → filter → **hard eligibility gate** (adapter-supported
+  language + not native-heavy/oversize/archived — a high star count can't rescue a repo
+  we can't hunt) → transparent non-AI score → rank → cap → `enqueue` a scheduler-ready
+  queue. CLI `pipeline.py discover`; never clones/runs/pushes. Reviewed (1 agent) +
+  reiterated: language/heaviness made a HARD GATE not a score term (P0), canonical
+  cross-transport repo-dedup (P1), `gh` search drops `GH_TOKEN` + forces the public
+  host + fails loud (P1 — the enterprise-token hazard), tolerant numeric coercion +
+  non-dict rows (P2), fail-loud on bad source. +11 tests → **suite 269**. Deferred:
+  GitHub enrichment of has_tests/native_heavy + per-source rate-limiting (the §12.5
+  scheduler enforces budgets); nothing consumes the queue yet (§12.5 next). See §11.24.
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 
