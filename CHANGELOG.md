@@ -316,6 +316,21 @@ missed.
   flipped). **The reproduce→fix→retry loop now works for all five languages**; the
   Anthropic-skills funnel is closed: ingest → reproduced → fixed (builders' LLM calls
   are live demos, mocked in tests). See §11.23.
+- **Phase 3 started — §12.6 gated-PR draft queue (`tool/pr_draft.py`)**: promotes
+  `pr.py`'s read-only preview into a persisted, reviewable DRAFT — a validated keeper
+  finding is parked in an approval queue (`cell-1/hunt/pr-drafts/<id>.yaml`, status
+  `pending-review`), a human approve/reject decision is recorded (rejections feed
+  back), and re-queue preserves the decision. Like `pr.py` it **NEVER pushes** — an
+  approved draft is pushed by a human via the draft's identity-gated `manual_steps`.
+  Traversal-guarded ids. **Now fully WIRED**: CLI (`pipeline.py pr-draft` /
+  `pr-drafts` / `pr-decide`), REST (`GET/POST /api/pr-drafts`, `GET /{id}`,
+  `POST /{id}/decide` — 409 surfaces keeper blockers), and a React **Review** tab
+  (queue-by-id, Approve/Reject, expandable identity-gated push steps; built + `tsc`
+  clean). +5 unit + 2 endpoint tests; fixed two pre-existing tests that encoded the
+  old "no non-Java builder" limitation → **suite 258**. CLI gate verified live (ec-1
+  refused with blockers). Local branch-assembly deliberately deferred — kept the
+  read-only posture (the human runs the draft's `manual_steps`). Next: §12.3
+  discovery + §12.5 scheduler.
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 

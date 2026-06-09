@@ -1345,6 +1345,16 @@ def _cli(argv: list[str] | None = None) -> int:
     vfy.add_argument("--model", default=ORCHESTRATOR_MODEL)
     vfy.add_argument("--effort", default=ORCHESTRATOR_EFFORT)
 
+    pdq = sub.add_parser("pr-draft", help="Queue a validated keeper finding as a reviewable PR DRAFT (never pushes).")
+    pdq.add_argument("finding_id")
+    pdq.add_argument("--target", default="jackson-databind")
+    pdq.add_argument("--force", action="store_true", help="queue even if not a ready keeper")
+    sub.add_parser("pr-drafts", help="List queued PR drafts (the human review queue).")
+    pdd = sub.add_parser("pr-decide", help="Record a human review decision on a PR draft (never pushes).")
+    pdd.add_argument("finding_id")
+    pdd.add_argument("decision", choices=["approved", "rejected"])
+    pdd.add_argument("--note", default=None)
+
     args = p.parse_args(argv)
 
     if args.cmd == "status":
@@ -1391,6 +1401,15 @@ def _cli(argv: list[str] | None = None) -> int:
         result = verify_finding(args.finding_id, build=not args.no_build,
                                 worktree=args.worktree, network=args.network,
                                 model=args.model, effort=args.effort, log=print)
+    elif args.cmd == "pr-draft":
+        import pr_draft as _pd
+        result = _pd.queue_draft(args.finding_id, args.target, force=args.force)
+    elif args.cmd == "pr-drafts":
+        import pr_draft as _pd
+        result = {"ok": True, "drafts": _pd.list_drafts()}
+    elif args.cmd == "pr-decide":
+        import pr_draft as _pd
+        result = _pd.decide_draft(args.finding_id, args.decision, note=args.note)
     else:  # pragma: no cover - argparse enforces choices
         result = {"ok": False, "error": f"unknown command {args.cmd!r}"}
 

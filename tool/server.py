@@ -36,6 +36,7 @@ import run_harness  # noqa: E402
 import findings as fnd  # noqa: E402
 import targets as tgt  # noqa: E402
 import pr as prmod  # noqa: E402
+import pr_draft as prdraft  # noqa: E402
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, JSONResponse, StreamingResponse
@@ -395,6 +396,41 @@ def pr_preview_ep(fid: str) -> dict:
     if p is None:
         raise HTTPException(404, f"unknown finding: {fid}")
     return pl.envelope_success(**p)
+
+
+# ---- gated-PR DRAFT queue (Phase 3 §12.6) — the human review queue; NEVER pushes ----
+@app.get("/api/pr-drafts")
+def list_pr_drafts_ep() -> dict:
+    return pl.envelope_success(drafts=prdraft.list_drafts())
+
+
+@app.get("/api/pr-drafts/{fid}")
+def get_pr_draft_ep(fid: str) -> dict:
+    d = prdraft.get_draft(fid)
+    if d is None:
+        raise HTTPException(404, f"no draft: {fid}")
+    return pl.envelope_success(**d)
+
+
+@app.post("/api/pr-drafts/{fid}")
+async def queue_pr_draft_ep(fid: str, request: Request) -> dict:
+    body = await _json_body(request)
+    r = prdraft.queue_draft(fid, body.get("target") or "jackson-databind",
+                            force=bool(body.get("force", False)))
+    if not r.get("ok"):
+        # 409 when it's just not a ready keeper (surface the blockers); else 400.
+        raise HTTPException(409 if r.get("blockers") else 400,
+                            r.get("error") or "; ".join(r.get("blockers", [])))
+    return pl.envelope_success(**r["draft"])
+
+
+@app.post("/api/pr-drafts/{fid}/decide")
+async def decide_pr_draft_ep(fid: str, request: Request) -> dict:
+    body = await _json_body(request)
+    r = prdraft.decide_draft(fid, (body.get("decision") or "").strip(), note=body.get("note"))
+    if not r.get("ok"):
+        raise HTTPException(400, r.get("error") or "decide failed")
+    return pl.envelope_success(**r["draft"])
 
 
 # ---- Targets (U3 front-door, plan §3.7) ----

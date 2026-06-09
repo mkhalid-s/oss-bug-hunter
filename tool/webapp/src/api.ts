@@ -111,6 +111,29 @@ export async function getPrPreview(id: string): Promise<PrPreview> {
   return _json(await fetch(`/api/findings/${id}/pr-preview`, { headers: H }))
 }
 
+// ---- gated-PR draft review queue (§12.6) ----
+export type PrDraft = {
+  finding_id: string; target: string
+  status: 'pending-review' | 'approved' | 'rejected'
+  title: string; branch: string; upstream: string | null; fork: string
+  commit_message: string; body: string; manual_steps: string[]
+  ready: boolean; blockers: string[]; decision_note: string | null
+  created?: string; updated?: string
+}
+export async function listPrDrafts(): Promise<PrDraft[]> {
+  return (await _json(await fetch('/api/pr-drafts', { headers: H }))).drafts || []
+}
+export async function queuePrDraft(id: string, target?: string, force = false): Promise<PrDraft> {
+  return _json(await fetch(`/api/pr-drafts/${encodeURIComponent(id)}`, {
+    method: 'POST', headers: H, body: JSON.stringify({ target, force }),
+  }))
+}
+export async function decidePrDraft(id: string, decision: 'approved' | 'rejected', note?: string): Promise<PrDraft> {
+  return _json(await fetch(`/api/pr-drafts/${encodeURIComponent(id)}/decide`, {
+    method: 'POST', headers: H, body: JSON.stringify({ decision, note }),
+  }))
+}
+
 // Quick-launch params for the in-scope Java finding (the header demo buttons).
 export const EC1 = {
   worktree: 'targets/jackson-databind',

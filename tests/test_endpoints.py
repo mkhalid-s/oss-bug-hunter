@@ -80,3 +80,27 @@ def test_orchestrate_endpoint_multilang():
                    headers=H).json()
         assert r["ok"] and r["outcomes"].get("fixed") == 1
         assert r["results"][0]["lang"] == "python"
+
+
+# ---- Phase 3 §12.6: gated-PR draft queue endpoints (prdraft mocked → hermetic) ----
+def test_pr_drafts_queue_decide_and_list(monkeypatch):
+    draft = {"finding_id": "vs-1", "status": "pending-review", "ready": True,
+             "title": "Fix bug", "manual_steps": ["unset GH_TOKEN"]}
+    monkeypatch.setattr(server.prdraft, "queue_draft",
+                        lambda fid, target="jackson-databind", force=False: {"ok": True, "draft": draft})
+    monkeypatch.setattr(server.prdraft, "list_drafts", lambda: [draft])
+    monkeypatch.setattr(server.prdraft, "decide_draft",
+                        lambda fid, decision, note=None: {"ok": True, "draft": {**draft, "status": decision}})
+    with _client() as c:
+        assert c.post("/api/pr-drafts/vs-1", json={"target": "demo"}, headers=H).json()["status"] == "pending-review"
+        assert c.get("/api/pr-drafts", headers=H).json()["drafts"][0]["finding_id"] == "vs-1"
+        d = c.post("/api/pr-drafts/vs-1/decide", json={"decision": "approved"}, headers=H).json()
+        assert d["ok"] and d["status"] == "approved"
+
+
+def test_pr_draft_nonkeeper_returns_409(monkeypatch):
+    monkeypatch.setattr(server.prdraft, "queue_draft",
+                        lambda *a, **k: {"ok": False, "blockers": ["not a validated keeper"]})
+    with _client() as c:
+        r = c.post("/api/pr-drafts/ec-1", json={}, headers=H)
+        assert r.status_code == 409 and "keeper" in r.json()["error"]["message"]

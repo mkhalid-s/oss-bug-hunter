@@ -94,9 +94,13 @@ def test_no_reproducer_built_stops(tmp_path, monkeypatch):
     assert pl.orchestrate_finding("ec-1")["outcome"] == "no-reproducer-built"
 
 
-def test_non_java_requires_existing_reproducer(tmp_path, monkeypatch):
+def test_non_java_reproducer_builder_failure_stops(tmp_path, monkeypatch):
+    # #54 changed this: non-Java now BUILDS a reproducer when missing (was "requires
+    # an existing one"). If the builder yields nothing, orchestrate stops cleanly at
+    # no-reproducer-built. Mock the builder so no real LLM call happens.
     cell = tmp_path / "cell-1"; _setup(cell, lang="python", repro=False)
     monkeypatch.setattr(pl, "CELL", cell)
+    monkeypatch.setattr(lrp, "build_repro", lambda *a, **k: None)   # builder produces nothing
     r = pl.orchestrate_finding("ec-1")
     assert r["outcome"] == "no-reproducer-built" and "python" in (r.get("note") or "")
 

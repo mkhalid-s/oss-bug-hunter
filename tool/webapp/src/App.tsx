@@ -8,6 +8,7 @@ import { listRuns, createRun, EC1, type Run } from './api'
 import { useRunStream } from './useRunStream'
 import { FindingsBoard } from './FindingsBoard'
 import { TargetsView } from './TargetsView'
+import { ReviewQueue } from './ReviewQueue'
 
 // Lazy: CodeMirror + diff2html ship in a separate chunk, loaded only when a
 // finding detail is opened — keeps the initial bundle small (plan §4.1).
@@ -22,7 +23,7 @@ const statusColor: Record<string, string> = {
 
 export default function App() {
   const qc = useQueryClient()
-  const [view, setView] = useState<'runs' | 'findings' | 'targets'>('runs')
+  const [view, setView] = useState<'runs' | 'findings' | 'targets' | 'review'>('runs')
   const [selected, setSelected] = useState<string | null>(null)
   const [finding, setFinding] = useState<string | null>(null)
   const runs = useQuery({ queryKey: ['runs'], queryFn: listRuns, refetchInterval: 2000 })
@@ -56,11 +57,12 @@ export default function App() {
             <SegmentedControl
               size="xs"
               value={view}
-              onChange={(v) => setView(v as 'runs' | 'findings' | 'targets')}
+              onChange={(v) => setView(v as 'runs' | 'findings' | 'targets' | 'review')}
               data={[
                 { label: 'Runs', value: 'runs' },
                 { label: 'Findings', value: 'findings' },
                 { label: 'Targets', value: 'targets' },
+                { label: 'Review', value: 'review' },
               ]}
             />
           </Group>
@@ -102,6 +104,8 @@ export default function App() {
       <AppShell.Main>
         {view === 'targets' ? (
           <TargetsView onRun={watchRun} />
+        ) : view === 'review' ? (
+          <ReviewQueue />
         ) : view === 'findings' ? (
           <FindingsBoard onSelect={setFinding} />
         ) : !selected ? (
