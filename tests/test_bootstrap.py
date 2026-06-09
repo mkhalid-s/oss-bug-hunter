@@ -73,28 +73,52 @@ class _FakeBackend:
     def __init__(self, name):
         self.name = name
 
+    def build_image(self, *a, **k):          # no-op (no daemon in tests)
+        pass
+
+    def run(self, spec, log=None):
+        return 0
+
 
 def test_maybe_bootstrap_trust_gate_and_errors(tmp_path, monkeypatch):
-    wt = _wt(tmp_path)
+    wt = _wt(tmp_path)                        # python (bootstrap_in_worktree=True)
     local, container = _FakeBackend("local"), _FakeBackend("docker")
-    # P0: untrusted (container backend) + needs bootstrap → FAIL CLOSED, no host install
-    v = rh._maybe_bootstrap(PY, wt, container, log=lambda *a: None)
-    assert v is not None and v.outcome is rh.Outcome.DEP_ERROR and "host" in v.raw_summary
-    # local + bootstrap returns ok:False → DEP_ERROR
+    cap = {}
+
+    def _fake_bs(worktree, adapter, *, run_step=None, network="bridge", log=print, force=False):
+        cap["run_step"] = run_step
+        return {"ok": True, "status": "bootstrapped"}
+    monkeypatch.setattr(bs, "bootstrap", _fake_bs)
+    # local (trusted) → bootstrap on the host, NO container run_step
+    assert rh._maybe_bootstrap(PY, wt, local, log=lambda *a: None) is None and cap["run_step"] is None
+    # #62: container (untrusted) + python (in-worktree) → IN-CONTAINER bootstrap (run_step set)
+    assert rh._maybe_bootstrap(PY, wt, container, log=lambda *a: None) is None
+    assert cap["run_step"] is not None        # ran in the container, not on the host
+    # cache-based lang (go) + container → FAIL CLOSED (caches don't survive between containers)
+    go = ad.get_adapter("go")
+    (tmp_path / "go.mod").write_text("module x\n")
+    v = rh._maybe_bootstrap(go, str(tmp_path), container, log=lambda *a: None)
+    assert v is not None and v.outcome is rh.Outcome.DEP_ERROR and "cache" in v.raw_summary
+    # local + bootstrap ok:False → DEP_ERROR; raise → DEP_ERROR (P2)
     monkeypatch.setattr(bs, "bootstrap", lambda *a, **k: {"ok": False, "step": ["uv", "x"]})
     assert rh._maybe_bootstrap(PY, wt, local, log=lambda *a: None).outcome is rh.Outcome.DEP_ERROR
-    # P2: bootstrap RAISES (e.g. uv not on PATH) → DEP_ERROR, not a silent skip
 
     def _boom(*a, **k):
         raise FileNotFoundError("uv")
     monkeypatch.setattr(bs, "bootstrap", _boom)
     assert rh._maybe_bootstrap(PY, wt, local, log=lambda *a: None).outcome is rh.Outcome.DEP_ERROR
-    # local + success → None (proceed)
-    monkeypatch.setattr(bs, "bootstrap", lambda *a, **k: {"ok": True, "status": "bootstrapped"})
-    assert rh._maybe_bootstrap(PY, wt, local, log=lambda *a: None) is None
     # no manifest → None regardless of backend (no-op)
     empty = tmp_path / "empty"; empty.mkdir()
     assert rh._maybe_bootstrap(PY, str(empty), container, log=lambda *a: None) is None
+
+
+def test_python_container_argv_uses_venv_when_present(tmp_path):
+    a = ad.get_adapter("python")
+    assert a.container_argv("t.py")[0] == "python"                    # no venv → image python
+    assert a.container_argv("t.py", str(tmp_path))[0] == "python"     # no venv dir → image python
+    vpy = tmp_path / ".oss-venv" / "bin" / "python"
+    vpy.parent.mkdir(parents=True); vpy.write_text("")
+    assert a.container_argv("t.py", str(tmp_path))[0] == ".oss-venv/bin/python"   # venv → /work-relative
 
 
 def test_lockfiles_in_manifest_hash(tmp_path):

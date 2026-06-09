@@ -182,7 +182,7 @@ def _adapter_run(backend, ad, worktree, selector, *, network, log, name):
     backend.build_image(ad.image_dir, ad.image,
                         build_args={"UID": str(os.getuid()), "GID": str(os.getgid())},
                         log=log)
-    return _capture(backend, ad.container_argv(selector), cwd=_CONTAINER_WORK,
+    return _capture(backend, ad.container_argv(selector, abs_wt), cwd=_CONTAINER_WORK,
                     network=network, env=dict(os.environ), log=log,
                     offline=(network == "none"), name=name,
                     image=ad.image, mounts=[(abs_wt, _CONTAINER_WORK)])
@@ -327,25 +327,48 @@ def _contained_generic(worktree: str, patch_abs: str, allowed, denied):
     return True, ""
 
 
+def _container_run_step(backend, ad, abs_wt, *, log):
+    """A bootstrap run_step that runs each step INSIDE the per-language container (image
+    built once; worktree mounted at /work; cwd=/work; network=bridge). For untrusted
+    targets, so install commands (which execute target code) never touch the host (#62)."""
+    backend.build_image(ad.image_dir, ad.image,
+                        build_args={"UID": str(os.getuid()), "GID": str(os.getgid())}, log=log)
+
+    def run_step(argv, *, cwd=None, network="bridge"):       # cwd ignored → always /work
+        return _capture(backend, argv, cwd=_CONTAINER_WORK, network=network,
+                        env=dict(os.environ), log=log, offline=(network == "none"),
+                        name="bootstrap", image=ad.image, mounts=[(abs_wt, _CONTAINER_WORK)])
+
+    return run_step
+
+
 def _maybe_bootstrap(ad, worktree, backend, *, log):
-    """M5 (#48): resolve the target's deps once (idempotent) before the first test.
-    Returns a DEP_ERROR verdict on refusal/failure, else None (proceed). Single-file
-    targets are a no-op; pristine() preserves the resulting .oss-venv/node_modules.
+    """M5: resolve the target's deps once (idempotent) before the first test. Returns a
+    DEP_ERROR verdict on refusal/failure, else None. Single-file targets are a no-op;
+    pristine() preserves the resulting .oss-venv/node_modules.
 
     TRUST GATE (review P0): bootstrap runs install commands that EXECUTE target code
-    (npm pre/postinstall, pip/PEP517 build backends), so it runs ONLY on the LOCAL
-    backend (trusted targets). For an UNTRUSTED target (a container backend was
-    selected), in-container bootstrap is not yet wired, so we FAIL CLOSED rather than
-    run installs on the host — never silently bypass the sandbox."""
+    (npm pre/postinstall, pip/PEP517 backends). So: TRUSTED → local backend → run on the
+    host. UNTRUSTED → container backend → run IN the container if the deps land in the
+    worktree (#62: Python .oss-venv / JS node_modules, shared via /work); otherwise
+    (cache-based langs: go/rust — caches live outside the worktree and don't survive
+    between the bootstrap and test containers) FAIL CLOSED until a shared cache mount is
+    wired. Never run an untrusted target's installs on the host."""
     try:
         import bootstrap as _bs
         if not _bs.needs_bootstrap(worktree, ad):
             return None
-        if backend.name != "local":
+        if backend.name == "local":
+            r = _bs.bootstrap(worktree, ad, network="bridge", log=log)
+        elif getattr(ad, "bootstrap_in_worktree", False):
+            abs_wt = os.path.abspath(worktree)
+            r = _bs.bootstrap(worktree, ad, network="bridge", log=log,
+                              run_step=_container_run_step(backend, ad, abs_wt, log=log))
+        else:
             return TestVerdict(Outcome.DEP_ERROR, 0, 0, 0, 0,
-                               "untrusted multi-dep target: in-container env-bootstrap "
-                               "is not wired yet — refusing to run installs on the host")
-        r = _bs.bootstrap(worktree, ad, network="bridge", log=log)
+                               f"untrusted {getattr(ad, 'language', '?')} multi-dep target: "
+                               "in-container bootstrap needs a shared dependency-cache mount "
+                               "(not wired) — refusing to run installs on the host")
         if not r.get("ok"):
             return TestVerdict(Outcome.DEP_ERROR, 0, 0, 0, 0,
                                f"env-bootstrap failed at {r.get('step')}")

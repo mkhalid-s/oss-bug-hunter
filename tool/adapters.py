@@ -61,6 +61,7 @@ class PythonPytestAdapter:
     VENV_DIR = ".oss-venv"                               # M5: per-target uv venv
     MANIFESTS = ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt",
                  "poetry.lock", "Pipfile.lock")   # lockfiles too → cache invalidates on a deps bump
+    bootstrap_in_worktree = True   # the .oss-venv lives in the worktree → shareable into a container via /work (#62)
 
     def place_reproducer(self, worktree: str, test_src: str, name: str) -> str:
         """Copy the reproducer into the repo root where pytest collects it.
@@ -78,16 +79,18 @@ class PythonPytestAdapter:
         when no manifest is present (our single-file synthetic targets need nothing).
         uv is used because Python 3.13 venvs here lack setuptools/ensurepip."""
         # the per-target venv needs the target's deps AND pytest (the test runner).
-        # ABSOLUTE paths: bootstrap steps run with cwd=worktree, so a worktree-relative
-        # venv path would double-nest; resolve() makes them cwd-independent.
-        wt = Path(worktree).resolve()
-        py = str(wt / self.VENV_DIR / "bin" / "python")
+        # CWD-RELATIVE paths (".oss-venv"): steps run with cwd=worktree locally OR
+        # cwd=/work in a container, so a bare relative path is correct in BOTH (the
+        # venv lands in the worktree, shared into the container via the /work mount).
+        # NOTE: must be relative-to-cwd, not worktree-prefixed (that double-nests).
+        wt = Path(worktree)
+        venv, py = self.VENV_DIR, f"{self.VENV_DIR}/bin/python"
         if any((wt / m).exists() for m in ("pyproject.toml", "setup.py", "setup.cfg")):
-            return [["uv", "venv", "--clear", str(wt / self.VENV_DIR)],
+            return [["uv", "venv", "--clear", venv],
                     ["uv", "pip", "install", "-e", ".", "pytest", "--python", py]]
         reqs = sorted(p.name for p in wt.glob("requirements*.txt"))
         if reqs:
-            return [["uv", "venv", "--clear", str(wt / self.VENV_DIR)]] + \
+            return [["uv", "venv", "--clear", venv]] + \
                    [["uv", "pip", "install", "-r", r, "--python", py] for r in reqs] + \
                    [["uv", "pip", "install", "pytest", "--python", py]]
         return []
@@ -99,9 +102,12 @@ class PythonPytestAdapter:
         return [py, "-m", "pytest", selector, "-q",
                 "-p", "no:cacheprovider", "--no-header"]
 
-    def container_argv(self, selector: str) -> list:
-        # IN-CONTAINER: the image's own `python` (with pytest), not sys.executable.
-        return ["python", "-m", "pytest", selector, "-q",
+    def container_argv(self, selector: str, worktree=None) -> list:
+        # IN-CONTAINER (cwd=/work): use the in-worktree bootstrapped venv (mounted at
+        # /work/.oss-venv) when present, else the image's own python (#62).
+        py = (f"{self.VENV_DIR}/bin/python"
+              if (worktree and self.venv_python(worktree)) else "python")
+        return [py, "-m", "pytest", selector, "-q",
                 "-p", "no:cacheprovider", "--no-header"]
 
     def parse_result(self, output: str):
@@ -159,8 +165,8 @@ class GoTestAdapter:
         return ["go", "test", "-run", run, "-count=1", "-v", "."]
 
     # `go` is on PATH in the golang image, so the in-container argv is identical.
-    def container_argv(self, selector: str) -> list:
-        return self.test_argv(selector)
+    def container_argv(self, selector: str, worktree=None) -> list:
+        return self.test_argv(selector, worktree)
 
     def parse_result(self, output: str):
         passes = len(re.findall(r"--- PASS:", output))
@@ -202,8 +208,8 @@ class RustCargoAdapter:
     def test_argv(self, selector: str, worktree=None) -> list:
         return ["cargo", "test", "--test", selector]
 
-    def container_argv(self, selector: str) -> list:  # cargo is on PATH in rust image
-        return self.test_argv(selector)
+    def container_argv(self, selector: str, worktree=None) -> list:  # cargo is on PATH in rust image
+        return self.test_argv(selector, worktree)
 
     def parse_result(self, output: str):
         passed = sum(int(m) for m in re.findall(r"(\d+) passed", output))
@@ -232,6 +238,7 @@ class JsNodeTestAdapter:
     image = "oss-bug-hunter-js:latest"
     image_dir = str(_ROOT / "tool" / "repro-js")
     MANIFESTS = ("package-lock.json", "package.json", "yarn.lock", "pnpm-lock.yaml")
+    bootstrap_in_worktree = True   # node_modules lives in the worktree → shareable via /work (node auto-resolves it) (#62)
 
     def bootstrap_steps(self, worktree) -> list:
         wt = Path(worktree)
@@ -248,8 +255,8 @@ class JsNodeTestAdapter:
     def test_argv(self, selector: str, worktree=None) -> list:
         return ["node", "--test", "--test-reporter=tap", selector]
 
-    def container_argv(self, selector: str) -> list:   # node is on PATH in the image
-        return self.test_argv(selector)
+    def container_argv(self, selector: str, worktree=None) -> list:   # node is on PATH in the image
+        return self.test_argv(selector, worktree)
 
     def parse_result(self, output: str):
         def n(label: str) -> int:

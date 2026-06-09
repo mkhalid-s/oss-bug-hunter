@@ -400,6 +400,17 @@ missed.
   atomic marker write. +2 tests → **suite 296**. **M5 complete + proven** — bootstrap is
   real for all four adapter languages; in-container bootstrap for untrusted targets is
   the remaining follow-on. See §11.28.
+- **#62 — in-container bootstrap for untrusted targets (closes the P0 properly)**:
+  `bootstrap_steps` now use CWD-relative paths (correct under cwd=worktree locally AND
+  cwd=/work in a container — also a cleaner fix for the #49 double-nest); Python's
+  `container_argv` is venv-aware (uses the in-container `/work/.oss-venv`). `_maybe_bootstrap`
+  routes: TRUSTED → host (local backend); UNTRUSTED + in-worktree deps (Python `.oss-venv` /
+  JS `node_modules`, shared via the `/work` mount) → run bootstrap **inside the container**
+  (build image + steps at `/work`, `network=bridge`) so installs never touch the host;
+  UNTRUSTED + cache-based langs (go/rust — caches live outside the worktree) → **FAIL
+  CLOSED** (a shared cache mount is the remaining piece, #63). Trust-gate test updated +1
+  → **suite 297**. Wired + unit-tested (mock backend); the real container run is host-only
+  (no daemon here). #49 re-verified locally with relative paths. See §11.29.
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 

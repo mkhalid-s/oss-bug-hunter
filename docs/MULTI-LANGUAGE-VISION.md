@@ -992,6 +992,25 @@ closing the §12.5 outer loop's last *structural* gate to multi-dep autonomous r
 honest residuals are: in-container bootstrap for UNTRUSTED targets (today they fail closed),
 and the environmental network/host realities (the proxy-CA wall, capable hosts).
 
+### 11.29 #62 — in-container bootstrap for untrusted targets (2026-06-09)
+Closes the M5 review's P0 properly. `bootstrap_steps` now use CWD-relative paths
+(`.oss-venv`, not absolute) — correct under `cwd=worktree` locally AND `cwd=/work` in a
+container (and a cleaner fix for the #49 double-nest); Python's `container_argv` is
+venv-aware (the in-container `/work/.oss-venv`). `_maybe_bootstrap` is trust-routed:
+**trusted** → host bootstrap (local backend, proven); **untrusted + in-worktree deps**
+(Python `.oss-venv` / JS `node_modules`, shared with the test container via the `/work`
+bind mount) → run bootstrap **inside the container** (`_container_run_step`: build image +
+each step at `/work`, `network=bridge`) so install commands that execute target code
+never touch the host; **untrusted + cache-based langs** (go/rust — module caches live in
+`~/.cache`/`~/.cargo`, outside the worktree, so they don't survive between the bootstrap
+and test containers) → **fail closed** until a shared cache mount is wired (#63).
+
+Wired + unit-tested (mock backend: routing + the container run_step's RunSpec + venv-aware
+container_argv); **the real container run is host-only** (no Docker daemon here — like the
+whole container path, §11.17). #49 re-verified locally with the relative paths. **297
+tests.** With this, untrusted targets never run installs on the host: Python/JS hunt in a
+container; go/rust are safely refused pending the cache mount.
+
 ---
 
 ## 12. Autonomy roadmap — toward unattended OSS bug-hunting (PROPOSED)
