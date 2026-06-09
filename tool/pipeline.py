@@ -1363,6 +1363,12 @@ def _cli(argv: list[str] | None = None) -> int:
     dsc.add_argument("--allow", nargs="*", default=None, help="restrict to these owners or owner/name repos")
     dsc.add_argument("--enqueue", action="store_true", help="persist the ranked queue for the scheduler")
 
+    sch = sub.add_parser("schedule", help="Outer loop (§12.5): consume the discovery queue → clone → hunt → fix → draft (budgeted, idempotent, NEVER pushes). Default DRY-RUN; --run executes (gated on the hunt step).")
+    sch.add_argument("--queue", default=None, help="discovery queue file (default cell-1/hunt/discovery-queue.yaml)")
+    sch.add_argument("--max-targets", type=int, default=5)
+    sch.add_argument("--max-attempts", type=int, default=1)
+    sch.add_argument("--run", action="store_true", help="execute for real (EngineSteps clones repos + currently stops at the unwired hunt step)")
+
     args = p.parse_args(argv)
 
     if args.cmd == "status":
@@ -1436,6 +1442,15 @@ def _cli(argv: list[str] | None = None) -> int:
                     result["enqueued"] = _disc.enqueue(cands)
             except (FileNotFoundError, ValueError) as e:   # bad --json path / malformed JSON
                 result = {"ok": False, "error": f"discovery source failed: {e}"}
+    elif args.cmd == "schedule":
+        import scheduler as _sch
+        q = _sch.load_queue(args.queue or _sch.QUEUE)
+        budget = _sch.Budget(max_targets=args.max_targets, max_attempts=args.max_attempts)
+        if args.run:
+            result = {"ok": True, **_sch.run_once(q, _sch.EngineSteps(), budget=budget,
+                                                  log=lambda m: print(m, file=sys.stderr))}
+        else:
+            result = {"ok": True, "dry_run": True, **_sch.plan(q, budget=budget)}
     else:  # pragma: no cover - argparse enforces choices
         result = {"ok": False, "error": f"unknown command {args.cmd!r}"}
 

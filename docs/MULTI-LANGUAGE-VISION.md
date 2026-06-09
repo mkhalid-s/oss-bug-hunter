@@ -913,6 +913,26 @@ discovery proposes the INPUT — but **nothing yet *consumes* the discovery queu
 budgeted + audited) is the next piece. Deferred follow-ons: GitHub enrichment of
 `has_tests`/`native_heavy` (a contents/code-search probe) and per-source rate-limiting.
 
+### 11.25 Phase 3 §12.5 — scheduler / outer loop (2026-06-09)
+`tool/scheduler.py` is the loop-closer: consume `discovery-queue.yaml` → per candidate:
+clone → (bootstrap) → hunt → verify → fix → gated-PR draft. The loop STRUCTURE is built
++ tested: `Budget` (max-targets/attempts), idempotent per-repo state (skip terminal on
+re-run), a KILL-SWITCH (the `cell-1/hunt/STOP` file or an injected callable), per-
+candidate error isolation, an audit trail, and a safe `plan()` DRY-RUN. Steps are an
+injectable `Steps` protocol (FakeSteps in tests → fully hermetic); `EngineSteps` wires
+the real components (`targets.add_target` trust=False → `verify_finding` →
+`orchestrate_finding` → `pr_draft.queue_draft`). CLI `pipeline.py schedule` (dry-run
+default; `--run` gated). It **never pushes** — it stops at a reviewable draft. +8 tests
+→ **277**.
+
+**HONEST GAP (the last mile to autonomy):** two steps are unwired — `bootstrap` (M5
+env-bootstrap, #46-49) and `hunt` (running the vendored Anthropic `/vuln-scan` skill on a
+real repo — a Claude Code skill invocation, not a pure Python call). So `--run` today
+clones a candidate and stops at `hunt`. The outer loop's skeleton is complete + proven;
+closing it needs the hunt step wired + M5 + a host with open network — then the full
+chain runs: **discover → clone → bootstrap → hunt → verify → fix → draft**, budgeted +
+audited, ending at a human-approved push (§12.6). That is L3→L4 on the §12.2 ladder.
+
 ---
 
 ## 12. Autonomy roadmap — toward unattended OSS bug-hunting (PROPOSED)

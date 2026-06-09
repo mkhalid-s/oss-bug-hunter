@@ -343,6 +343,18 @@ missed.
   non-dict rows (P2), fail-loud on bad source. +11 tests → **suite 269**. Deferred:
   GitHub enrichment of has_tests/native_heavy + per-source rate-limiting (the §12.5
   scheduler enforces budgets); nothing consumes the queue yet (§12.5 next). See §11.24.
+- **Phase 3 §12.5 — scheduler / outer loop (`tool/scheduler.py`)**: the loop-closer.
+  Consumes the discovery queue and drives each candidate clone → bootstrap → hunt →
+  verify → fix → gated-PR draft — BUDGETED (max-targets/attempts), IDEMPOTENT (per-repo
+  state; skip terminal on re-run), KILL-SWITCH (`cell-1/hunt/STOP` file or injected),
+  per-candidate error-isolated, AUDITED — and NEVER pushes (stops at a reviewable draft).
+  Steps are an injectable `Steps` protocol (hermetic FakeSteps in tests); `EngineSteps`
+  wires the real components (add_target / verify_finding / orchestrate_finding /
+  pr_draft). CLI `pipeline.py schedule` (DRY-RUN `plan` by default; `--run` gated). +8
+  tests → **suite 277**. HONEST GAP: a full real run is gated on the **hunt** step (the
+  Anthropic `/vuln-scan` skill, run in Claude Code) + **M5** env-bootstrap — so
+  `EngineSteps.hunt`/`bootstrap` are TODO and `--run` clones then stops at hunt. The loop
+  STRUCTURE is built + proven; wiring hunt closes the autonomous loop. See §11.25.
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 
