@@ -69,12 +69,37 @@ def test_bootstrap_skipped_no_manifest(tmp_path):
     assert res["status"] == "skipped"
 
 
-def test_maybe_bootstrap_dep_error_seam(tmp_path, monkeypatch):
+class _FakeBackend:
+    def __init__(self, name):
+        self.name = name
+
+
+def test_maybe_bootstrap_trust_gate_and_errors(tmp_path, monkeypatch):
     wt = _wt(tmp_path)
+    local, container = _FakeBackend("local"), _FakeBackend("docker")
+    # P0: untrusted (container backend) + needs bootstrap → FAIL CLOSED, no host install
+    v = rh._maybe_bootstrap(PY, wt, container, log=lambda *a: None)
+    assert v is not None and v.outcome is rh.Outcome.DEP_ERROR and "host" in v.raw_summary
+    # local + bootstrap returns ok:False → DEP_ERROR
     monkeypatch.setattr(bs, "bootstrap", lambda *a, **k: {"ok": False, "step": ["uv", "x"]})
-    v = rh._maybe_bootstrap(PY, wt, log=lambda *a: None)
-    assert v is not None and v.outcome is rh.Outcome.DEP_ERROR
+    assert rh._maybe_bootstrap(PY, wt, local, log=lambda *a: None).outcome is rh.Outcome.DEP_ERROR
+    # P2: bootstrap RAISES (e.g. uv not on PATH) → DEP_ERROR, not a silent skip
+
+    def _boom(*a, **k):
+        raise FileNotFoundError("uv")
+    monkeypatch.setattr(bs, "bootstrap", _boom)
+    assert rh._maybe_bootstrap(PY, wt, local, log=lambda *a: None).outcome is rh.Outcome.DEP_ERROR
+    # local + success → None (proceed)
     monkeypatch.setattr(bs, "bootstrap", lambda *a, **k: {"ok": True, "status": "bootstrapped"})
-    assert rh._maybe_bootstrap(PY, wt, log=lambda *a: None) is None      # success → proceed
+    assert rh._maybe_bootstrap(PY, wt, local, log=lambda *a: None) is None
+    # no manifest → None regardless of backend (no-op)
     empty = tmp_path / "empty"; empty.mkdir()
-    assert rh._maybe_bootstrap(PY, str(empty), log=lambda *a: None) is None  # no manifest → no-op
+    assert rh._maybe_bootstrap(PY, str(empty), container, log=lambda *a: None) is None
+
+
+def test_lockfiles_in_manifest_hash(tmp_path):
+    go = ad.get_adapter("go")
+    (tmp_path / "go.mod").write_text("module x\n")
+    h1 = bs._manifest_hash(str(tmp_path), go)
+    (tmp_path / "go.sum").write_text("h1:abc=\n")          # a lockfile-only change
+    assert bs._manifest_hash(str(tmp_path), go) != h1      # go.sum now invalidates the cache

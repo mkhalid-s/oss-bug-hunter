@@ -969,6 +969,29 @@ bootstrap is a fast near-no-op; the LOAD-BEARING proof (a Python src-layout pack
 structural gate to multi-dep autonomous runs (modulo environmental network/host realities,
 e.g. the proxy-CA wall the headroom pilot hit).
 
+### 11.28 M5 #49 — load-bearing proof + review fixes; multi-dep loop works (2026-06-09)
+`targets/pysrc-demo` is a Python **src-layout** package (`widget`) importable ONLY after
+`uv pip install -e .` — so M5 bootstrap is genuinely load-bearing here. **Proven on the
+live engine:** `validate_repro pysrc-1` → FAILED (reproduces a ZeroDivisionError via the
+bootstrapped venv); without bootstrap it's BUILD_ERROR; `orchestrate_finding('pysrc-1')`
+→ **fixed** (reproduce → fix → validate), driven by REAL `uv venv` + editable install +
+pytest. The proof caught two real bugs: the venv lacked pytest (the test runner), and the
+venv path double-nested (worktree-relative vs cwd=worktree → now absolute).
+
+A background **agent review** of the M5 mechanism found + fixed: **P0** — a trust-gate
+bypass where bootstrap ran install commands (npm pre/postinstall, pip/PEP517 backends —
+all executing target code) on the HOST even for untrusted targets; `_maybe_bootstrap` now
+**fails closed** for a container backend (in-container bootstrap is the follow-on), never
+running installs on the host. **P1** — lockfiles (`go.sum`/`Cargo.lock`/`poetry.lock`/
+`Pipfile.lock`/`yarn.lock`/`pnpm-lock.yaml`) added to the idempotency hash so a deps bump
+invalidates the cache. **P2** — a bootstrap exception (e.g. `uv` absent) → `DEP_ERROR`,
+not a silent skip. **P3** — atomic marker write. **296 tests.**
+
+**M5 is complete + proven:** the bootstrap step is real for all four adapter languages,
+closing the §12.5 outer loop's last *structural* gate to multi-dep autonomous runs. The
+honest residuals are: in-container bootstrap for UNTRUSTED targets (today they fail closed),
+and the environmental network/host realities (the proxy-CA wall, capable hosts).
+
 ---
 
 ## 12. Autonomy roadmap — toward unattended OSS bug-hunting (PROPOSED)

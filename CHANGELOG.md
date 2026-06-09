@@ -385,6 +385,21 @@ missed.
   bootstrap (`go mod download`/`cargo fetch`/`npm install` fired + marked `ok`,
   daemonless, no regression) → **suite 294**. Remaining M5: #49 (a Python multi-dep
   target where `uv pip install -e .` is LOAD-BEARING — the test fails without it).
+- **M5 #49 — load-bearing proof + review fixes (multi-dep autonomous run works)**:
+  added `targets/pysrc-demo` (a Python src-layout package importable ONLY after
+  `uv pip install -e .`) + finding `pysrc-1` + reproducer + patch. **Proven end-to-end
+  on the live engine**: `validate_repro` → FAILED (reproduces) and `orchestrate_finding`
+  → **fixed**, driven by REAL `uv` bootstrap (venv + editable install + pytest) — and
+  `BUILD_ERROR` without bootstrap (load-bearing). The proof caught two real bugs (venv
+  lacked pytest; double-nested venv path → now absolute). An independent agent review of
+  the M5 mechanism found + fixed: **P0** trust-gate bypass — bootstrap ran install
+  commands (npm/pip executing target code) on the HOST for untrusted targets; now
+  `_maybe_bootstrap` FAILS CLOSED for a container backend; **P1** lockfiles
+  (`go.sum`/`Cargo.lock`/`poetry.lock`/…) added to the idempotency hash; **P2** a
+  bootstrap exception (e.g. `uv` not on PATH) now → `DEP_ERROR`, not a silent skip; **P3**
+  atomic marker write. +2 tests → **suite 296**. **M5 complete + proven** — bootstrap is
+  real for all four adapter languages; in-container bootstrap for untrusted targets is
+  the remaining follow-on. See §11.28.
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 

@@ -21,6 +21,13 @@ def _now() -> str:
     return _dt.datetime.now(_dt.timezone.utc).isoformat(timespec="seconds")
 
 
+def _write_marker(path, data) -> None:
+    """Atomic write (tmp + os.replace) so a crash/concurrent run can't leave a torn marker."""
+    tmp = Path(str(path) + ".tmp")
+    tmp.write_text(json.dumps(data))
+    os.replace(tmp, path)
+
+
 def _manifest_files(worktree, adapter) -> list:
     wt = Path(worktree)
     out = []
@@ -79,10 +86,9 @@ def bootstrap(worktree, adapter, *, run_step=None, network: str = "bridge", log=
         log(f"[bootstrap] step {i}/{len(steps)}: {' '.join(argv)}")
         rc, out = runner(argv, cwd=str(worktree), network=network)
         if rc != 0:
-            marker.write_text(json.dumps({"status": "failed", "hash": key,
-                                          "step": argv, "ts": _now()}))
+            _write_marker(marker, {"status": "failed", "hash": key, "step": argv, "ts": _now()})
             log(f"[bootstrap] FAILED rc={rc}: {(out or '')[-200:]}")
             return {"ok": False, "status": "failed", "step": argv, "rc": rc}
-    marker.write_text(json.dumps({"status": "ok", "hash": key, "steps": len(steps), "ts": _now()}))
+    _write_marker(marker, {"status": "ok", "hash": key, "steps": len(steps), "ts": _now()})
     log(f"[bootstrap] ok ({len(steps)} step(s))")
     return {"ok": True, "status": "bootstrapped", "steps_run": len(steps)}

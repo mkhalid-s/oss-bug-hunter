@@ -1,0 +1,12 @@
+diff --git a/src/widget/__init__.py b/src/widget/__init__.py
+index 9179d5b..9f83fb4 100644
+--- a/src/widget/__init__.py
++++ b/src/widget/__init__.py
+@@ -4,4 +4,6 @@
+ 
+ def safe_div(a, b):
+     """Divide a by b; should return 0 when b == 0 (the contract)."""
+-    return a / b        # BUG: no zero guard -> ZeroDivisionError
++    if b == 0:
++        return 0
++    return a / b

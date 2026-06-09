@@ -327,21 +327,31 @@ def _contained_generic(worktree: str, patch_abs: str, allowed, denied):
     return True, ""
 
 
-def _maybe_bootstrap(ad, worktree, *, log):
+def _maybe_bootstrap(ad, worktree, backend, *, log):
     """M5 (#48): resolve the target's deps once (idempotent) before the first test.
-    Returns a DEP_ERROR verdict if bootstrap fails, else None (proceed). Local-backend
-    bootstrap today (container bootstrap is a follow-on); single-file targets are a no-op.
-    pristine() preserves the resulting .oss-venv/node_modules across runs."""
+    Returns a DEP_ERROR verdict on refusal/failure, else None (proceed). Single-file
+    targets are a no-op; pristine() preserves the resulting .oss-venv/node_modules.
+
+    TRUST GATE (review P0): bootstrap runs install commands that EXECUTE target code
+    (npm pre/postinstall, pip/PEP517 build backends), so it runs ONLY on the LOCAL
+    backend (trusted targets). For an UNTRUSTED target (a container backend was
+    selected), in-container bootstrap is not yet wired, so we FAIL CLOSED rather than
+    run installs on the host — never silently bypass the sandbox."""
     try:
         import bootstrap as _bs
         if not _bs.needs_bootstrap(worktree, ad):
             return None
+        if backend.name != "local":
+            return TestVerdict(Outcome.DEP_ERROR, 0, 0, 0, 0,
+                               "untrusted multi-dep target: in-container env-bootstrap "
+                               "is not wired yet — refusing to run installs on the host")
         r = _bs.bootstrap(worktree, ad, network="bridge", log=log)
         if not r.get("ok"):
             return TestVerdict(Outcome.DEP_ERROR, 0, 0, 0, 0,
                                f"env-bootstrap failed at {r.get('step')}")
-    except Exception as e:
-        log(f"[harness] bootstrap skipped ({e})")
+    except Exception as e:                       # review P2: missing toolchain etc. → DEP_ERROR, not a silent skip
+        log(f"[harness] bootstrap error: {e}")
+        return TestVerdict(Outcome.DEP_ERROR, 0, 0, 0, 0, f"env-bootstrap error: {e}")
     return None
 
 
@@ -352,7 +362,7 @@ def _adapter_validate_repro(backend, worktree, test_file, *, lang, network, log)
     cwd = os.path.abspath(worktree)
     with worktree_lock(worktree):
         pristine(worktree)
-        berr = _maybe_bootstrap(ad, worktree, log=log)
+        berr = _maybe_bootstrap(ad, worktree, backend, log=log)
         if berr is not None:
             return berr
         try:
@@ -376,7 +386,7 @@ def _adapter_validate_fix(backend, worktree, test_file, patch, *, lang, network,
     patch_abs = os.path.abspath(patch)
     with worktree_lock(worktree):
         pristine(worktree)
-        berr = _maybe_bootstrap(ad, worktree, log=log)
+        berr = _maybe_bootstrap(ad, worktree, backend, log=log)
         if berr is not None:
             return berr
         ok, reason = _contained_generic(worktree, patch_abs, ad.patch_allowed, ad.patch_denied)

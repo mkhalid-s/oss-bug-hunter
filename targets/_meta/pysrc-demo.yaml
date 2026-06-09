@@ -1,0 +1,6 @@
+name: pysrc-demo
+language: python
+adapter: python-pytest
+repo: null
+sha: null
+trusted: true

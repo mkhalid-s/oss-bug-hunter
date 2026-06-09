@@ -59,7 +59,8 @@ class PythonPytestAdapter:
     image = "oss-bug-hunter-py:latest"
     image_dir = str(_ROOT / "tool" / "repro-py")
     VENV_DIR = ".oss-venv"                               # M5: per-target uv venv
-    MANIFESTS = ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt")
+    MANIFESTS = ("pyproject.toml", "setup.py", "setup.cfg", "requirements.txt",
+                 "poetry.lock", "Pipfile.lock")   # lockfiles too → cache invalidates on a deps bump
 
     def place_reproducer(self, worktree: str, test_src: str, name: str) -> str:
         """Copy the reproducer into the repo root where pytest collects it.
@@ -76,15 +77,19 @@ class PythonPytestAdapter:
         """M5: uv-based per-target venv + (editable | requirements) install. Returns []
         when no manifest is present (our single-file synthetic targets need nothing).
         uv is used because Python 3.13 venvs here lack setuptools/ensurepip."""
-        wt = Path(worktree)
+        # the per-target venv needs the target's deps AND pytest (the test runner).
+        # ABSOLUTE paths: bootstrap steps run with cwd=worktree, so a worktree-relative
+        # venv path would double-nest; resolve() makes them cwd-independent.
+        wt = Path(worktree).resolve()
         py = str(wt / self.VENV_DIR / "bin" / "python")
         if any((wt / m).exists() for m in ("pyproject.toml", "setup.py", "setup.cfg")):
-            return [["uv", "venv", str(wt / self.VENV_DIR)],
-                    ["uv", "pip", "install", "-e", ".", "--python", py]]
+            return [["uv", "venv", "--clear", str(wt / self.VENV_DIR)],
+                    ["uv", "pip", "install", "-e", ".", "pytest", "--python", py]]
         reqs = sorted(p.name for p in wt.glob("requirements*.txt"))
         if reqs:
-            return [["uv", "venv", str(wt / self.VENV_DIR)]] + \
-                   [["uv", "pip", "install", "-r", r, "--python", py] for r in reqs]
+            return [["uv", "venv", "--clear", str(wt / self.VENV_DIR)]] + \
+                   [["uv", "pip", "install", "-r", r, "--python", py] for r in reqs] + \
+                   [["uv", "pip", "install", "pytest", "--python", py]]
         return []
 
     def test_argv(self, selector: str, worktree=None) -> list:
@@ -135,7 +140,7 @@ class GoTestAdapter:
     _TESTFUNC = re.compile(r"func\s+(Test[A-Za-z0-9_]*)\s*\(")
     image = "oss-bug-hunter-go:latest"
     image_dir = str(_ROOT / "tool" / "repro-go")
-    MANIFESTS = ("go.mod",)
+    MANIFESTS = ("go.mod", "go.sum")
 
     def bootstrap_steps(self, worktree) -> list:
         return [["go", "mod", "download"]] if (Path(worktree) / "go.mod").exists() else []
@@ -181,7 +186,7 @@ class RustCargoAdapter:
     patch_denied = [re.compile(r"(^|/)(Cargo\.toml|Cargo\.lock|\.github/)")]
     image = "oss-bug-hunter-rust:latest"
     image_dir = str(_ROOT / "tool" / "repro-rust")
-    MANIFESTS = ("Cargo.toml",)
+    MANIFESTS = ("Cargo.toml", "Cargo.lock")
 
     def bootstrap_steps(self, worktree) -> list:
         return [["cargo", "fetch"]] if (Path(worktree) / "Cargo.toml").exists() else []
@@ -226,7 +231,7 @@ class JsNodeTestAdapter:
                                r"pnpm-lock\.yaml|node_modules/|\.github/)")]
     image = "oss-bug-hunter-js:latest"
     image_dir = str(_ROOT / "tool" / "repro-js")
-    MANIFESTS = ("package-lock.json", "package.json")
+    MANIFESTS = ("package-lock.json", "package.json", "yarn.lock", "pnpm-lock.yaml")
 
     def bootstrap_steps(self, worktree) -> list:
         wt = Path(worktree)

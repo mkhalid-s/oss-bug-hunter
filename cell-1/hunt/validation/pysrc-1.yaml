@@ -1,0 +1,19 @@
+finding_id: pysrc-1
+angle: edge-case
+type: missing-zero-guard
+location: src/widget/__init__.py:safe_div
+summary: safe_div(a, 0) raises ZeroDivisionError instead of returning 0 (its documented contract)
+language: python
+target: pysrc-demo
+evidence: |
+  safe_div divides without guarding b == 0; the docstring says it returns 0 then.
+  Synthetic MULTI-DEP target: widget is importable only after `pip install -e .`,
+  so this finding only validates if M5 env-bootstrap runs (load-bearing proof).
+dedup_auto: {osv_matches: [], github_matches: []}
+gates:
+  reproducer: {status: not-attempted, path: cell-1/hunt/repros/pysrc-1.py, notes: needs env-bootstrap.}
+  dedup: {is_duplicate: false, references: [], notes: synthetic demo finding}
+  cwe: {cwe: CWE-369, cvss: 'N/A', notes: divide by zero}
+  fix_passes_tests: {status: not-attempted, patch_path: cell-1/hunt/patches/pysrc-1.patch, notes: awaiting validation}
+final_status: pending
+self_consistency: {}

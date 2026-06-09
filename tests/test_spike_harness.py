@@ -913,3 +913,18 @@ def test_containment_denies_bootstrap_dirs():
     py = _adapters.get_adapter("python")
     assert any(d.search(".oss-venv/lib/x.py") for d in py.patch_denied)
     assert any(d.search(".oss-bootstrap.json") for d in py.patch_denied)
+
+
+# ---- M5 #49: load-bearing env-bootstrap on a synthetic MULTI-DEP target ----
+def test_pysrc_demo_bootstrap_is_load_bearing():
+    # widget is a src-layout package importable ONLY after `uv pip install -e .` (M5
+    # bootstrap). validate_repro auto-bootstraps then reproduces — FAILED (not
+    # BUILD_ERROR) proves bootstrap ran + is load-bearing. Skip where uv is absent.
+    import shutil as _sh
+    wt = ROOT / "targets" / "pysrc-demo"
+    repro = ROOT / "cell-1" / "hunt" / "repros" / "pysrc-1.py"
+    if not (wt.is_dir() and repro.is_file() and _sh.which("uv")):
+        pytest.skip("pysrc-demo target or uv toolchain not present")
+    v = rh.validate_repro(str(wt), "pysrc-1", str(repro), trusted=True, network="bridge",
+                          lang="python", log=lambda *a: None)
+    assert v.outcome is rh.Outcome.FAILED          # ZeroDivisionError reproduces via the bootstrapped venv
