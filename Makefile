@@ -36,7 +36,7 @@ SCAFFOLDS_SENTINEL := $(CELL)/hunt/validation/.scaffolds-generated
 .PHONY: all status help recon backtest-candidates backtest-prep backtest-score \
         hunt-prep hunt-validate-scaffold hunt-validate-report pass23-prep final-report \
         clean clean-worktrees reset-pass23 reset-hunt reset-backtest reset-cell wipe \
-        dashboard \
+        dashboard targets \
         day1-recon day2-build day2-backtest-prep day2-score \
         day3-hunt-prep day3-scaffolds day3-report \
         day4-prep day4-report
@@ -53,11 +53,16 @@ dashboard:
 	@printf "$(B)[dashboard]$(N) starting at http://127.0.0.1:8765 (Ctrl-C to stop)\n"
 	@$(PROJ)/.venv/bin/python $(PROJ)/tool/server.py
 
+targets:
+	@printf "$(B)[targets]$(N) materializing synthetic demo targets from targets/_src/\n"
+	@$(PYTHON) $(PROJ)/tool/demo_targets.py
+
 help:
 	@printf "$(B)Cell #1 pipeline$(N)\n\n"
 	@printf "  $(B)make$(N)           advance to next step (auto steps chain; stops at human steps)\n"
 	@printf "  $(B)make status$(N)    show where you are in the pipeline\n"
 	@printf "  $(B)make dashboard$(N) start the FastAPI dashboard at http://127.0.0.1:8765\n"
+	@printf "  $(B)make targets$(N)   materialize synthetic demo targets (targets/_src -> git repos)\n"
 	@printf "  $(B)make help$(N)      this\n\n"
 	@printf "$(B)Jump to a specific step$(N) (skips dependency checks)\n"
 	@printf "  $(D)# friendly name$(N)              $(D)# canonical name$(N)        $(D)# what it does$(N)\n"

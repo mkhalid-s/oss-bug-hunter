@@ -1045,6 +1045,27 @@ Cargo.lock untracked → the guard correctly ignores the lockfile.)
 Unit-tested incl. the `-e` allowlist emission and the guard against a real git repo; the
 real in-container go/rust run remains host-only (no Docker daemon here, §11.17). **302 tests.**
 
+### 11.31 #56 — portable synthetic demo targets (2026-06-09)
+The 5 synthetic demo targets (pybug/gobug/jsbug/rustbug/pysrc-demo) are the fixtures the
+per-language adapter e2e tests run against. They used to exist only as gitignored working
+copies with a nested `.git`, which meant a fresh clone of this repo had no targets — so every
+adapter e2e test skipped — and, after #63, pointing the engine at an uncommitted manifest would
+hard-fail the new pristine guard.
+
+The tension: the engine needs each target to BE a git repo (for `git apply` + `pristine`), but
+committing a nested `.git` as content/gitlinks is broken. Resolution: track the SOURCE, not the
+repo. Each target's committed tree is extracted (`git archive HEAD`) into a tracked
+`targets/_src/<name>/` (plain files, no `.git`). `tool/demo_targets.py` (`make targets`)
+materializes a gitignored working copy `targets/<name>/` on demand — copy → `git init` → one
+commit — idempotently (a working copy that already has a HEAD is left alone; `pristine()` keeps
+it clean between runs). The throwaway commit uses a neutral identity with `gpgsign=false` so it
+never trips the host's enterprise signing.
+
+The 5 e2e tests now call `materialize(name)` instead of skipping when the target is absent; they
+skip only when the language toolchain (go/cargo/node/uv) is missing. Proven end-to-end by
+deleting the gobug-demo working copy (leaving only `_src`) and running the go e2e test: it
+rebuilt the repo from `_src` and passed. **303 tests.**
+
 ---
 
 ## 12. Autonomy roadmap — toward unattended OSS bug-hunting (PROPOSED)

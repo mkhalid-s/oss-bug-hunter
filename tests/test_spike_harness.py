@@ -15,6 +15,7 @@ sys.path.insert(0, str(ROOT / "tool"))
 import exec_backend as eb       # noqa: E402
 import run_harness as rh        # noqa: E402
 import run_store as rs          # noqa: E402
+import demo_targets             # noqa: E402  (#56: materialize synthetic targets from tracked _src)
 
 
 # ---- run_harness.parse_console -> Outcome ----
@@ -423,12 +424,9 @@ def test_python_adapter_place_and_argv(tmp_path):
 
 
 def test_python_adapter_validates_synthetic_target():
-    wt = str(ROOT / "targets" / "pybug-demo")
+    wt = str(demo_targets.materialize("pybug-demo"))   # #56: built from tracked _src, not skipped
     repro = str(ROOT / "cell-1" / "hunt" / "repros" / "py-1.py")
     patch = str(ROOT / "cell-1" / "hunt" / "patches" / "py-1.patch")
-    if not (Path(wt).is_dir() and Path(repro).is_file() and Path(patch).is_file()):
-        import pytest as _pt
-        _pt.skip("pybug-demo synthetic target not present")
     v = rh.validate_repro(wt, "py-1", repro, trusted=True, network="none",
                           lang="python", log=lambda *a: None)
     assert v.outcome is rh.Outcome.FAILED          # reproduces (IndexError on [])
@@ -463,13 +461,12 @@ def test_go_adapter_parse():
 
 
 def test_go_adapter_validates_synthetic_target():
-    wt = str(ROOT / "targets" / "gobug-demo")
+    import shutil as _sh
+    if not _sh.which("go"):
+        pytest.skip("go toolchain not present")
+    wt = str(demo_targets.materialize("gobug-demo"))   # #56
     repro = str(ROOT / "cell-1" / "hunt" / "repros" / "go-1.go")
     patch = str(ROOT / "cell-1" / "hunt" / "patches" / "go-1.patch")
-    import shutil as _sh
-    if not (Path(wt).is_dir() and Path(repro).is_file() and _sh.which("go")):
-        import pytest as _pt
-        _pt.skip("gobug-demo target or go toolchain not present")
     v = rh.validate_repro(wt, "go-1", repro, trusted=True, network="none",
                           lang="go", log=lambda *a: None)
     assert v.outcome is rh.Outcome.FAILED          # panic on empty slice
@@ -602,13 +599,12 @@ def test_rust_adapter_containment():
 def test_rust_adapter_validates_synthetic_target():
     # cargo arrived in the devcontainer 2026-06-08, so Rust now runs end-to-end
     # here like Java/Python/Go/JS. Guarded: skips cleanly where cargo is absent.
-    wt = str(ROOT / "targets" / "rustbug-demo")
+    import shutil as _sh
+    if not _sh.which("cargo"):
+        pytest.skip("cargo toolchain not present")
+    wt = str(demo_targets.materialize("rustbug-demo"))   # #56
     repro = str(ROOT / "cell-1" / "hunt" / "repros" / "rs-1.rs")
     patch = str(ROOT / "cell-1" / "hunt" / "patches" / "rs-1.patch")
-    import shutil as _sh
-    if not (Path(wt).is_dir() and Path(repro).is_file() and _sh.which("cargo")):
-        import pytest as _pt
-        _pt.skip("rustbug-demo target or cargo toolchain not present")
     v = rh.validate_repro(wt, "rs-1", repro, trusted=True, network="none",
                           lang="rust", log=lambda *a: None)
     assert v.outcome is rh.Outcome.FAILED          # panic on empty slice
@@ -641,13 +637,12 @@ def test_js_adapter_parse():
 
 
 def test_js_validates_synthetic_target():
-    wt = str(ROOT / "targets" / "jsbug-demo")
+    import shutil as _sh
+    if not _sh.which("node"):
+        pytest.skip("node not present")
+    wt = str(demo_targets.materialize("jsbug-demo"))   # #56
     repro = str(ROOT / "cell-1" / "hunt" / "repros" / "js-1.js")
     patch = str(ROOT / "cell-1" / "hunt" / "patches" / "js-1.patch")
-    import shutil as _sh
-    if not (Path(wt).is_dir() and Path(repro).is_file() and _sh.which("node")):
-        import pytest as _pt
-        _pt.skip("jsbug-demo target or node not present")
     v = rh.validate_repro(wt, "js-1", repro, trusted=True, network="none",
                           lang="javascript", log=lambda *a: None)
     assert v.outcome is rh.Outcome.FAILED          # all-negative bug reproduces
@@ -921,10 +916,24 @@ def test_pysrc_demo_bootstrap_is_load_bearing():
     # bootstrap). validate_repro auto-bootstraps then reproduces — FAILED (not
     # BUILD_ERROR) proves bootstrap ran + is load-bearing. Skip where uv is absent.
     import shutil as _sh
-    wt = ROOT / "targets" / "pysrc-demo"
+    if not _sh.which("uv"):
+        pytest.skip("uv toolchain not present")
+    wt = demo_targets.materialize("pysrc-demo")   # #56
     repro = ROOT / "cell-1" / "hunt" / "repros" / "pysrc-1.py"
-    if not (wt.is_dir() and repro.is_file() and _sh.which("uv")):
-        pytest.skip("pysrc-demo target or uv toolchain not present")
     v = rh.validate_repro(str(wt), "pysrc-1", str(repro), trusted=True, network="bridge",
                           lang="python", log=lambda *a: None)
     assert v.outcome is rh.Outcome.FAILED          # ZeroDivisionError reproduces via the bootstrapped venv
+
+
+# ---- #56: synthetic demo targets are portable (tracked source → materialized git repo) ----
+def test_demo_targets_materialize_idempotent():
+    dt = demo_targets
+    assert set(dt.available()) >= {"gobug-demo", "jsbug-demo", "pysrc-demo",
+                                   "rustbug-demo", "pybug-demo"}
+    wt = dt.materialize("gobug-demo")              # builds a real git repo from tracked _src
+    assert (wt / ".git").is_dir() and (wt / "go.mod").exists() and dt.is_materialized("gobug-demo")
+    head1 = dt._git(wt, "rev-parse", "HEAD").stdout
+    wt2 = dt.materialize("gobug-demo")             # idempotent: same repo, untouched
+    assert wt2 == wt and dt._git(wt2, "rev-parse", "HEAD").stdout == head1
+    with pytest.raises(FileNotFoundError):         # unknown target → clear error
+        dt.materialize("does-not-exist")

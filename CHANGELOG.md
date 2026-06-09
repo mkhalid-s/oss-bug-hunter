@@ -426,6 +426,16 @@ missed.
   package.json), while still cleaning derived lockfiles (Cargo.lock/go.sum/*-lock) and
   preserving the `.oss-*` caches. +5 tests → **suite 302**; real go/rust/Python local
   e2e re-verified. The in-container go/rust run stays host-only (no daemon here). See §11.30.
+- **#56 — synthetic demo targets are now portable**: the 5 demo targets (pybug/gobug/jsbug/
+  rustbug/pysrc) previously lived only in gitignored working copies with a nested `.git`, so a
+  fresh clone skipped every adapter e2e test and (post-#63) an uncommitted manifest would
+  hard-fail the pristine guard. Their committed source is now tracked under
+  `targets/_src/<name>/` (extracted via `git archive HEAD`, no nested `.git`), and
+  `tool/demo_targets.py` / `make targets` MATERIALIZES the gitignored working copy on demand
+  (copy → `git init` → one commit, idempotent). The 5 e2e tests now `materialize()` instead of
+  skipping on absence — they skip ONLY when the language toolchain is missing. Proven by
+  deleting a working copy and watching the go e2e rebuild it from `_src` and pass. +1 test →
+  **suite 303**. See §11.31.
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 

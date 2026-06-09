@@ -25,16 +25,13 @@ target/
 .reviews-local/
 .adopt-src/
 
-# --- Cloned targets (external, fetched on demand — NOT ours to commit).
-#     Synthetic *-demo targets + targets/_meta ARE tracked (test fixtures). ---
+# --- Working-copy / cloned targets (NOT committed). The engine needs each target to BE a
+#     git repo (for git apply / pristine), so committing one as content/gitlinks is broken.
+#     Tracked instead: targets/_meta sidecars, cell-1 findings, and — for the synthetic
+#     demo targets — their SOURCE under targets/_src/ (#56). `make targets` (tool/
+#     demo_targets.py) materializes the gitignored working copies below from _src. ---
 /targets/jackson-databind/
 /targets/headroom/
-
-# Nested git repos: the engine needs each target to BE a git repo (for
-# git apply / pristine), so committing them as content/gitlinks is broken.
-# Treated like the cloned real targets (jackson-databind above) — excluded;
-# only targets/_meta sidecars + cell-1 findings are tracked. Portability of the
-# synthetic demo targets (commit source + git-init at setup) is a follow-up.
 cell-1/backtest/worktrees/
 /targets/gobug-demo/
 /targets/jsbug-demo/
