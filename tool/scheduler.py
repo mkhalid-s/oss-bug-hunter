@@ -167,7 +167,9 @@ class EngineSteps(Steps):
     """Default real wiring. clone → targets.add_target (trust=False, fail-closed);
     verify → pipeline.verify_finding; fix → pipeline.orchestrate_finding; draft →
     pr_draft.queue_draft. `bootstrap` (M5 #46) and `hunt` (the Anthropic skills, run in
-    Claude Code) are NOT wired yet — a real autonomous run is gated on them."""
+    Claude Code) — `hunt` is WIRED via tool/hunt.py (headless vuln-scan → ingest);
+    `bootstrap` (M5 #46) is still a no-op, so multi-dep real repos need M5. The LLM
+    calls (hunt/fix builders) need the model + a host — they're live, not hermetic."""
 
     def clone(self, cand: dict) -> str | None:
         import targets as _tg
@@ -180,7 +182,11 @@ class EngineSteps(Steps):
         return name if _tg.get_target(name) else None
 
     def hunt(self, target: str) -> list:
-        raise NotImplementedError("hunt step (Anthropic /vuln-scan skill) not wired — see §12.5 TODO")
+        import hunt as _hunt
+        import targets as _tg
+        tdir = ROOT / "targets" / target
+        lang = _tg.detect_language(str(tdir))
+        return _hunt.vuln_scan(str(tdir), language=lang, target_name=target).get("finding_ids", [])
 
     def verify(self, finding_id: str) -> str:
         import pipeline as _pl

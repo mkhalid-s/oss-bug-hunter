@@ -355,6 +355,16 @@ missed.
   Anthropic `/vuln-scan` skill, run in Claude Code) + **M5** env-bootstrap — so
   `EngineSteps.hunt`/`bootstrap` are TODO and `--run` clones then stops at hunt. The loop
   STRUCTURE is built + proven; wiring hunt closes the autonomous loop. See §11.25.
+- **§12.5 last mile — hunt step WIRED (`tool/hunt.py`, #61)**: `vuln_scan` runs a
+  headless `claude -p` static scan (the automatable analogue of the vendored Anthropic
+  `/vuln-scan` skill), emits the `VULN-FINDINGS.json` schema, and bridges it through
+  `ingest.py` into finding scaffolds; `EngineSteps.hunt` now calls it (detecting the
+  target's language). **The §12 autonomous loop is now structurally complete
+  end-to-end** — clone → bootstrap → hunt → verify → fix → draft, all wired — and still
+  never pushes. Injectable runner → hermetic; +5 tests → **suite 282**. Remaining gates
+  to a live run (environmental, not structural): M5 env-bootstrap (#46-49) for multi-dep
+  repos (single-dep runs today with the no-op bootstrap), the LLM calls need the model +
+  a host, heavy/native repos need a capable host. See §11.26.
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 

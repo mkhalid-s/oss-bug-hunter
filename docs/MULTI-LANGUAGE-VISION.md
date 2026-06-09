@@ -933,6 +933,24 @@ closing it needs the hunt step wired + M5 + a host with open network — then th
 chain runs: **discover → clone → bootstrap → hunt → verify → fix → draft**, budgeted +
 audited, ending at a human-approved push (§12.6). That is L3→L4 on the §12.2 ladder.
 
+### 11.26 §12.5 last mile — hunt wired; the autonomous loop is structurally complete (2026-06-09)
+`tool/hunt.py` wires the scheduler's `hunt`: `vuln_scan(target_dir, language, …)` runs a
+headless `claude -p` static scan (the automatable analogue of the vendored Anthropic
+`/vuln-scan` skill — richer multi-agent results still come from running the interactive
+skill in Claude Code), emits the `VULN-FINDINGS.json` schema, and bridges it via
+`ingest.py` → finding scaffolds. `EngineSteps.hunt` calls it with the target's detected
+language. The LLM call is injectable (hermetic in tests; +5 → **282**); a real scan is a
+live demo like the repro/fix builders.
+
+**The §12 autonomous loop is now structurally COMPLETE end-to-end:** discover (§12.3) →
+clone → bootstrap → **hunt (#61)** → verify (#54) → fix (#55) → gated-PR draft (§12.6) →
+human-approved push — every step wired, budgeted, idempotent, audited, kill-switchable,
+never auto-pushing. **Remaining gates to a live run are ENVIRONMENTAL, not structural:**
+M5 env-bootstrap (#46-49) for multi-dep repos (single-dep/already-resolvable run today
+with the no-op bootstrap); the LLM calls (hunt scan + fix builder) need the model + a
+host; heavy/native repos need a capable host (the headroom lesson). On such a host,
+`pipeline.py schedule --run` executes the full chain — L3→L4, reachable now.
+
 ---
 
 ## 12. Autonomy roadmap — toward unattended OSS bug-hunting (PROPOSED)
