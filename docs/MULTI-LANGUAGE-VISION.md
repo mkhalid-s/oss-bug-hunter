@@ -1118,6 +1118,31 @@ Proven on a new portable `rustws-demo` virtual workspace (members `mathx` (buggy
 the adapter resolved `mathx`, validate_repro panicked (FAILED) and validate_fix PASSED via
 `cargo test -p mathx`. Plus hermetic tests for resolution / selector / glob-members. **314 tests.**
 
+### 11.34 #25 — shard pipeline_lock into per-key locks (G1) (2026-06-10)
+G1 ("concurrent runs don't deadlock") was proven in #28; #25 makes them PARALLELIZE. The engine
+already locks per-worktree (`run_harness.worktree_lock`). The remaining coarse point was
+pipeline.py: per-finding writes ran either under the single global `pipeline_lock` (so two
+unrelated findings serialized) or — `_set_gate` — UNDER NO LOCK AT ALL, a read-modify-write on
+the scaffold YAML that the 2-worker run pool could corrupt / lose-update.
+
+`keyed_lock(key)` is a cross-process file lock scoped to a key (e.g. `finding:ec-1`, lock file
+under `cell-1/.locks/`) and reentrant per-thread (a nested same-key acquire is a no-op, so leaf
+writers compose without self-deadlock). The flock-with-timeout loop is factored into
+`_flock_acquire`, shared with `pipeline_lock`. A `@_keyed(key_fn)` decorator wraps the
+per-finding write leaves — `_set_gate` (`finding:<id>`), `_write_repro_result`/
+`_write_fix_result` (`finding:<id>`), `_write_backtest_result` (`backtest:<issue>`),
+`_write_hunt_result` (`hunt:<angle>:<pass>`). Same key → serialized + race-free; different keys
+→ parallel, so two orchestrate runs on different findings/worktrees no longer block on one mutex.
+
+`run_step` deliberately KEEPS the global `pipeline_lock` — a whole `make` step mutates broad
+shared cell-1 state (pipeline progression, aggregate reports), so it stays the intentional coarse
+boundary. Lock ordering is acyclic (the orchestrate path takes only keyed_lock; batch writers
+take pipeline_lock then keyed; nothing takes them in reverse).
+
+Proven with 5 thread tests: reentrancy, different-keys-don't-block, same-key-serializes,
+pipeline_lock still works, and — the real fix — concurrent `_set_gate` on one scaffold (50×2
+iterations) never loses an update or tears the YAML. **319 tests.**
+
 ---
 
 ## 12. Autonomy roadmap — toward unattended OSS bug-hunting (PROPOSED)

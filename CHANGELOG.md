@@ -459,6 +459,16 @@ missed.
   so `test_argv` emits `cargo test -p <pkg> --test <stem>` — run from the root, so no cwd
   juggling. Proven on a new portable `rustws-demo` virtual workspace (members `mathx`+`util`):
   validate_repro → FAILED, validate_fix → PASSED via `-p mathx`. +3 tests → **suite 314**. See §11.33.
+- **#25 — shard the global pipeline lock into per-key locks (G1)**: the orchestrate/verify
+  path's per-finding writes were either under the single global `pipeline_lock` (serializing
+  unrelated findings) or — `_set_gate` — UNLOCKED (a read-modify-write race on the scaffold
+  YAML under the 2-worker run pool). Added `keyed_lock(key)` — a reentrant, cross-process
+  per-key file lock (`cell-1/.locks/`) — applied via a `@_keyed` decorator to the per-finding
+  write leaves (`_set_gate`, `_write_repro/fix/backtest/hunt_result`). Same key serializes
+  (race-free RMW); DIFFERENT keys run in parallel, so two orchestrate runs on different
+  findings/worktrees no longer block each other. `run_step` keeps the coarse global
+  `pipeline_lock` (a whole make step mutates broad shared state); lock ordering stays acyclic.
+  +5 thread tests (incl. a concurrent-`_set_gate` no-lost-update proof) → **suite 319**. See §11.34.
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 

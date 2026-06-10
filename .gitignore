@@ -43,6 +43,8 @@ cell-1/backtest/worktrees/
 cell-1/.runs.db
 cell-1/.runs.db-shm
 cell-1/.runs.db-wal
+cell-1/.pipeline.lock
+cell-1/.locks/
 cell-1/hunt/discovery-queue.yaml
 cell-1/hunt/scheduler-state.yaml
 cell-1/hunt/VULN-FINDINGS-*.json

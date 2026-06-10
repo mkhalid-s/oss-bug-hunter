@@ -9,11 +9,14 @@ from __future__ import annotations
 
 import contextlib
 import fcntl
+import functools
+import hashlib
 import json
 import os
 import re
 import subprocess
 import sys
+import threading
 import time
 from dataclasses import dataclass
 from pathlib import Path
@@ -47,41 +50,46 @@ def _safe_load_scaffold(scaffold_p):
     except _yaml.YAMLError as e:
         return None, f"malformed scaffold {scaffold_p.name}: {str(e)[:120]}"
 
-# ---- P1-12: pipeline-wide file lock ----
+# ---- P1-12: global pipeline lock + #25: per-key sharded locks (G1) ----
 _LOCK_PATH = CELL / ".pipeline.lock"
+_LOCKS_DIR = CELL / ".locks"            # one lock file per key for keyed_lock (#25)
+_held_keys = threading.local()          # per-thread set of held keys → keyed_lock is reentrant
+
+
+def _flock_acquire(f, timeout_s: float, what: str) -> None:
+    """Block-acquire an exclusive flock on open file `f`, polling until `timeout_s`. Raises
+    RuntimeError on timeout so a STALE lock surfaces loudly instead of hanging forever."""
+    deadline = time.time() + timeout_s
+    announced = False
+    while True:
+        try:
+            fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
+            return
+        except BlockingIOError:
+            if not announced:
+                print(f"[pipeline] waiting for lock {what} (another holder in progress)...",
+                      file=sys.stderr)
+                announced = True
+            if time.time() > deadline:
+                raise RuntimeError(f"Could not acquire lock {what} within {timeout_s}s "
+                                   f"(another process holds it; if stale, remove the lock file).")
+            time.sleep(0.5)
 
 
 @contextlib.contextmanager
 def pipeline_lock(timeout_s: float = 30.0) -> Iterator[None]:
-    """Exclusive lock on cell-1/.pipeline.lock. Use around any cell-1/ mutation.
+    """GLOBAL exclusive lock on cell-1/.pipeline.lock — the COARSE boundary, held by
+    `run_step` for a whole make step (which mutates broad shared cell-1 state). Per-finding /
+    per-artifact work uses the finer `keyed_lock` (#25) instead, so concurrent runs on
+    different findings/worktrees parallelize (G1) rather than all serialize here.
 
-    Prevents Python-side races between FastAPI handlers and MCP tool calls.
-    `make` recipes are NOT under this lock — running `make` and the
-    dashboard's Run button simultaneously can still race (rare; documented).
-
-    Raises RuntimeError if the lock can't be acquired within `timeout_s`.
+    Prevents Python-side races between FastAPI handlers and MCP tool calls. `make` recipes are
+    NOT under this lock. Raises RuntimeError if not acquired within `timeout_s`.
     """
     CELL.mkdir(parents=True, exist_ok=True)
     f = open(_LOCK_PATH, "w")
     try:
-        deadline = time.time() + timeout_s
-        announced = False
-        while True:
-            try:
-                fcntl.flock(f, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                break
-            except BlockingIOError:
-                if not announced:
-                    print(f"[pipeline] waiting for lock {_LOCK_PATH} "
-                          f"(another step in progress)...", file=sys.stderr)
-                    announced = True
-                if time.time() > deadline:
-                    raise RuntimeError(
-                        f"Could not acquire pipeline lock within {timeout_s}s. "
-                        f"Another process holds {_LOCK_PATH}. "
-                        f"If stale: rm -f {_LOCK_PATH}"
-                    )
-                time.sleep(0.5)
+        _flock_acquire(f, timeout_s, str(_LOCK_PATH))
         try:
             yield
         finally:
@@ -91,6 +99,49 @@ def pipeline_lock(timeout_s: float = 30.0) -> Iterator[None]:
                 pass
     finally:
         f.close()
+
+
+@contextlib.contextmanager
+def keyed_lock(key: str, timeout_s: float = 30.0) -> Iterator[None]:
+    """G1 per-key shard (#25): a cross-process file lock scoped to `key` (e.g. "finding:ec-1")
+    rather than the single global pipeline_lock. Same key → serialized (race-free read-modify-
+    write); DIFFERENT keys → parallel, so two orchestrate runs on different findings/worktrees
+    don't block each other. Reentrant per-thread (a nested same-key acquire is a no-op, so leaf
+    writers compose without self-deadlock); across threads/processes the same key still
+    serializes via flock."""
+    held = getattr(_held_keys, "s", None)
+    if held is None:
+        held = _held_keys.s = set()
+    if key in held:                     # this thread already holds it → reentrant no-op
+        yield
+        return
+    _LOCKS_DIR.mkdir(parents=True, exist_ok=True)
+    f = open(_LOCKS_DIR / (hashlib.sha1(key.encode()).hexdigest() + ".lock"), "w")
+    try:
+        _flock_acquire(f, timeout_s, key)
+        held.add(key)
+        try:
+            yield
+        finally:
+            held.discard(key)
+            try:
+                fcntl.flock(f, fcntl.LOCK_UN)
+            except OSError:
+                pass
+    finally:
+        f.close()
+
+
+def _keyed(key_fn):
+    """Decorator: run the wrapped per-key write under keyed_lock(key_fn(*args)) — race-free
+    against a concurrent writer of the SAME key, parallel across DIFFERENT keys (#25)."""
+    def deco(fn):
+        @functools.wraps(fn)
+        def wrap(*a, **k):
+            with keyed_lock(key_fn(*a, **k)):
+                return fn(*a, **k)
+        return wrap
+    return deco
 
 # ---- step definitions ----
 @dataclass
@@ -498,6 +549,7 @@ def list_backtest_entries() -> list[dict]:
     return out
 
 
+@_keyed(lambda issue_num, *a, **k: f"backtest:{issue_num}")     # #25 per-issue shard
 def _write_backtest_result(issue_num: str, result: dict) -> dict:
     """Post-process one backtest claude result: write raw output, extract +
     validate the findings YAML, write findings.yaml. Shared by the single-entry
@@ -716,6 +768,7 @@ DAY4_PASSES = [("code-quality", 2), ("code-quality", 3),
                ("edge-case", 2), ("edge-case", 3)]
 
 
+@_keyed(lambda angle, pass_num, *a, **k: f"hunt:{angle}:{pass_num}")   # #25 per-(angle,pass) shard
 def _write_hunt_result(angle: str, pass_num: int, result: dict) -> dict:
     """Post-process one hunt claude result into findings-pass<N>.yaml. Shared by
     the single and batch runners."""
@@ -794,6 +847,7 @@ def _load_day3_hunt():
     return _day3_hunt
 
 
+@_keyed(lambda finding_id, *a, **k: f"finding:{finding_id}")   # #25 per-finding shard
 def _write_repro_result(finding_id: str, result: dict) -> dict:
     """Post-process one reproducer-builder claude result: write raw output,
     extract the ```java block, write cell-1/hunt/repros/<id>.java. Shared by the
@@ -896,6 +950,7 @@ def run_repro_batch(finding_ids: list[str] | None = None, max_parallel: int = 4)
 
 
 # ---- fix-builder (#4) -------------------------------------------------------
+@_keyed(lambda finding_id, *a, **k: f"finding:{finding_id}")   # #25 per-finding shard
 def _write_fix_result(finding_id: str, result: dict) -> dict:
     """Post-process one fix-builder claude result: write raw output, extract the
     ```diff block, write cell-1/hunt/patches/<id>.patch. Shared single+batch."""
@@ -1021,8 +1076,10 @@ _REPRO_EXT_ORCH = {"java": ".java", "python": ".py", "go": ".go",
                    "rust": ".rs", "javascript": ".js"}
 
 
+@_keyed(lambda scaffold_path, *a, **k: f"finding:{Path(scaffold_path).stem}")   # #25: race-free RMW
 def _set_gate(scaffold_path, gate: str, status: str, notes: str) -> None:
-    """Update one gate's status/notes in a finding scaffold, preserving the rest."""
+    """Update one gate's status/notes in a finding scaffold, preserving the rest. Per-finding
+    keyed_lock (#25) makes the read-modify-write race-free against a concurrent gate write."""
     import yaml as _yaml
     try:
         s = _yaml.safe_load(Path(scaffold_path).read_text()) or {}
