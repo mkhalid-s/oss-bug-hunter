@@ -87,8 +87,6 @@ def worktree_lock(worktree: str, timeout_warn: bool = True):
 # from M5/#62/#63) and the worktree lock. Shared by the real clean and the dry-run guard.
 _CLEAN_KEEP = (".m2", ".repro-worktree.lock", ".oss-venv", ".oss-bootstrap.json",
                "node_modules", ".oss-go", ".oss-cargo")
-
-
 def pristine(worktree: str) -> str | None:
     """Reset tracked files + remove untracked, preserving dependency caches. Returns an
     error string — and SKIPS the destructive reset/clean — when the worktree is not a
@@ -100,17 +98,31 @@ def pristine(worktree: str) -> str | None:
                             capture_output=True, text=True)
     if inside.returncode != 0 or inside.stdout.strip() != "true":
         return f"not a git work tree: {worktree} — clone or git-init the target first"
-    excludes = [a for e in _CLEAN_KEEP for a in ("-e", e)]
-    # dry-run FIRST: list exactly what the real clean would delete (the excludes keep it from
-    # walking the big cache dirs, so this stays fast), and refuse if a manifest is among them.
-    dry = subprocess.run(["git", "-C", worktree, "clean", "-fdn", *excludes],
-                         capture_output=True, text=True)
+    # Refuse if the destructive clean would delete an untracked PRIMARY manifest. `git status
+    # --porcelain --untracked-files=all` lists every untracked file INDIVIDUALLY — unlike
+    # `git clean -fdn`, which COLLAPSES an untracked dir to one entry and hid a nested manifest
+    # (a deletion bug that re-review caught: a dir literally named build/dist/target was skipped),
+    # and unlike an os.walk it never follows a symlinked dir. It honors .gitignore exactly as the
+    # real clean; we exclude the preserved caches by pathspec (they hold vendored manifests that
+    # aren't the target's source) and core.quotePath=false keeps non-ASCII paths parseable.
+    keep = [f":(exclude){d}" for d in _CLEAN_KEEP]
+    st = subprocess.run(["git", "-C", worktree, "-c", "core.quotePath=false", "status",
+                         "--porcelain", "--untracked-files=all", "--", ".", *keep],
+                        capture_output=True, text=True)
     manifests = adapters.primary_manifests()      # lockfiles are derived → safe to clean
-    doomed = [p for ln in dry.stdout.splitlines() if ln.startswith("Would remove ")
-              for p in (ln[len("Would remove "):].strip(),) if Path(p).name in manifests]
+    doomed = []
+    for ln in st.stdout.splitlines():
+        if not ln.startswith("?? "):              # untracked only (tracked edits are reset, not deleted)
+            continue
+        rel = ln[3:].strip()
+        if len(rel) >= 2 and rel[0] == '"' and rel[-1] == '"':
+            rel = rel[1:-1]                       # porcelain quotes a path containing special chars
+        if Path(rel).name in manifests and not (set(Path(rel).parts) & set(_CLEAN_KEEP)):
+            doomed.append(rel)                    # a real manifest at ANY depth (caches filtered out)
     if doomed:
         return ("uncommitted manifest would be deleted by reset: "
-                f"{', '.join(sorted(doomed))} — commit it (or git-init the target) first")
+                f"{', '.join(sorted(set(doomed)))} — commit it (or git-init the target) first")
+    excludes = [a for e in _CLEAN_KEEP for a in ("-e", e)]
     subprocess.run(["git", "-C", worktree, "reset", "--hard", "-q"],
                    stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
     subprocess.run(["git", "-C", worktree, "clean", "-fdq", *excludes],
@@ -211,7 +223,7 @@ def _adapter_run(backend, ad, worktree, selector, *, network, log, name):
                     network=network, env=dict(os.environ), log=log,
                     offline=(network == "none"), name=name,
                     image=ad.image, mounts=[(abs_wt, _CONTAINER_WORK)],
-                    container_env=ad.container_cache_env(_CONTAINER_WORK))   # #63 cache redirect
+                    container_env=getattr(ad, "container_cache_env", lambda w: {})(_CONTAINER_WORK))  # #63
 
 
 def _compile_and_run_isolated(backend, cwd, fqcn, *, env, mvn_off, offline,
@@ -359,7 +371,7 @@ def _container_run_step(backend, ad, abs_wt, *, log):
     targets, so install commands (which execute target code) never touch the host (#62)."""
     backend.build_image(ad.image_dir, ad.image,
                         build_args={"UID": str(os.getuid()), "GID": str(os.getgid())}, log=log)
-    cache_env = ad.container_cache_env(_CONTAINER_WORK)   # #63: go/rust caches under /work
+    cache_env = getattr(ad, "container_cache_env", lambda w: {})(_CONTAINER_WORK)   # #63: go/rust under /work
 
     def run_step(argv, *, cwd=None, network="bridge"):       # cwd ignored → always /work
         return _capture(backend, argv, cwd=_CONTAINER_WORK, network=network,

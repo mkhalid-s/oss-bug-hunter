@@ -235,3 +235,65 @@ def test_pristine_preserves_oss_caches(tmp_path):
     assert rh.pristine(str(repo)) is None
     for d in (".oss-go", ".oss-cargo", ".oss-venv", "node_modules"):
         assert (repo / d / "marker").exists()              # cache NOT cleaned
+
+
+def test_pristine_guard_refuses_manifest_in_untracked_subdir(tmp_path):
+    # review P0/P1: `git clean -fdn` COLLAPSES a wholly-untracked dir to one line, so the guard
+    # lists untracked files INDIVIDUALLY (git status -uall) — catching a nested manifest at any
+    # depth, even under a build/cache-named dir, without following symlinks.
+    import os as _os
+    import shutil
+    repo = tmp_path / "r"; repo.mkdir()
+    _git(repo, "init", "-q")
+    (repo / "README.md").write_text("x\n")
+    _git(repo, "add", "-A"); _git(repo, "commit", "-qm", "init")
+
+    # (a) manifest nested in a fresh untracked dir → caught (the dir collapses to one clean line)
+    (repo / "crates" / "core").mkdir(parents=True)
+    (repo / "crates" / "core" / "Cargo.toml").write_text("[package]\nname = 'core'\n")
+    err = rh.pristine(str(repo))
+    assert err and "uncommitted manifest" in err and "Cargo.toml" in err
+    assert (repo / "crates" / "core" / "Cargo.toml").exists()      # NOT deleted — guard fired
+    shutil.rmtree(repo / "crates")
+
+    # (b) review P0: a dir literally named build/dist/target is a LEGAL package dir — a manifest
+    # under it must STILL be caught (the old _SCAN_SKIP shortcut skipped it → silent deletion).
+    (repo / "build").mkdir(); (repo / "build" / "Cargo.toml").write_text("[package]\nname = 'b'\n")
+    err2 = rh.pristine(str(repo))
+    assert err2 and "build/Cargo.toml" in err2 and (repo / "build" / "Cargo.toml").exists()
+    shutil.rmtree(repo / "build")
+
+    # (c) review P1: an untracked symlink-to-a-tree must NOT be traversed (no false refusal/crash)
+    (tmp_path / "outside").mkdir(); (tmp_path / "outside" / "Cargo.toml").write_text("x\n")
+    _os.symlink(tmp_path / "outside", repo / "evil")
+    assert rh.pristine(str(repo)) is None                          # symlink listed as 1 entry, not walked
+    assert (tmp_path / "outside" / "Cargo.toml").exists()          # untouched
+
+    # (d) a pure build-output dir (no manifest) is still cleaned, guard proceeds
+    (repo / "target" / "debug").mkdir(parents=True); (repo / "target" / "junk.o").write_text("x")
+    assert rh.pristine(str(repo)) is None
+    assert not (repo / "target").exists()                          # untracked build dir cleaned
+
+
+def test_container_run_step_routes_into_container(tmp_path):
+    # #62/#63 glue (review P2): the bootstrap run_step must run each step IN the container —
+    # image built, worktree mounted at /work, cwd=/work, and the cache-redirect env passed as -e.
+    captured = {}
+
+    class _Rec:
+        name = "docker"
+        def build_image(self, *a, **k):
+            captured["built"] = True
+        def run(self, spec, log=None):
+            captured["spec"] = spec
+            return 0
+
+    go = ad.get_adapter("go")
+    abs_wt = str(tmp_path)
+    step = rh._container_run_step(_Rec(), go, abs_wt, log=lambda *a: None)
+    rc, _ = step(["go", "mod", "download"], network="bridge")
+    spec = captured["spec"]
+    assert rc == 0 and captured.get("built") is True
+    assert spec.argv == ["go", "mod", "download"] and spec.cwd == rh._CONTAINER_WORK
+    assert spec.image == go.image and (abs_wt, rh._CONTAINER_WORK) in spec.mounts
+    assert spec.container_env == {"GOMODCACHE": "/work/.oss-go/mod", "GOCACHE": "/work/.oss-go/build"}

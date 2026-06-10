@@ -469,6 +469,28 @@ missed.
   findings/worktrees no longer block each other. `run_step` keeps the coarse global
   `pipeline_lock` (a whole make step mutates broad shared state); lock ordering stays acyclic.
   +5 thread tests (incl. a concurrent-`_set_gate` no-lost-update proof) → **suite 319**. See §11.34.
+- **Standard review (7 local perspectives) of the session + fixes**: no P0; one consensus P1
+  (5/7) — `pristine()`'s manifest guard missed an untracked manifest inside an untracked
+  DIRECTORY (`git clean -fdn` collapses the dir to one line), so it could silently delete the
+  source-of-truth manifest it exists to protect, colliding with the #51 workspace shape. Fixed:
+  the dry-run now descends into reported dirs (pruning build/cache dirs) + `core.quotePath=false`
+  for non-ASCII paths. Bundled cheap P2s: `_NATIVE_TREE` now matches `.cpp/.cu/.hpp`; enrichment
+  leaves `has_tests`/`native_heavy` UNKNOWN on a truncated git tree instead of a false `False`;
+  `container_cache_env` is called defensively (a future adapter missing it can't crash mid-run).
+  +3 tests (subdir-guard, `_container_run_step` routing, truncated-tree) → **suite 322**. REVIEW.md
+  has the full list; remaining P2/P3 (Rust first-lib heuristic, batch-writer lock coherence,
+  lock-file cleanup, doc nits) are advisory. See §11.35.
+- **Deep review (12 local perspectives) + fixes**: a full re-review of the post-Standard-fix
+  state caught a **P0 the Standard fix had introduced** — pristine's `_SCAN_SKIP` shortcut skipped
+  (and thus deleted) a real manifest in a dir legally named `build`/`dist`/`target`, plus a
+  symlink-walk variant. Fixed by replacing `git clean -fdn`+`os.walk`+`_SCAN_SKIP` with `git status
+  --porcelain -uall` (lists files individually — no dir-collapse, no symlink-follow); regression
+  test extended (build-named-dir manifest caught, symlink not traversed). Also fixed: `pytest.ini`
+  so a bare `pytest` doesn't collect the cloned `targets/` repos (was 12 errors); stale "hunt
+  unwired" text in scheduler/CLI (hunt wired #61); README count 228→322. Two architectural P1s
+  (monorepo `component` schema #64; scheduler bootstrap-before-hunt #65) + an adapter-Protocol P2
+  (#66) filed as follow-ons (roadmap-scope, not blockers). Security invariants re-verified. **suite
+  322.** Critic verdict: push-ready. See §11.36 + REVIEW.md.
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 

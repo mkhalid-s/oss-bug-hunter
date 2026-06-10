@@ -156,6 +156,18 @@ def test_enrich_candidate_merges_without_clobbering():
     assert c3["native_heavy"] is True
 
 
+def test_enrich_candidate_truncated_tree_leaves_unknown():
+    # review P2: a TRUNCATED git tree is partial → don't derive a false has_tests/native=False.
+    c = {"repo": "o/big", "language": "go"}
+    d.enrich_candidate(c, {"languages": {"Go": 1000}, "tree_paths": [], "tree_truncated": True})
+    assert c.get("has_tests") is None and c.get("native_heavy") is None   # unknown, not False
+    # the languages API is complete → it can still rule native_heavy IN despite a truncated tree
+    c2 = {"repo": "o/cpp", "language": "rust"}
+    d.enrich_candidate(c2, {"languages": {"C++": 900, "Rust": 100}, "tree_paths": [],
+                            "tree_truncated": True})
+    assert c2["native_heavy"] is True
+
+
 def test_github_source_enriches_only_eligible_repos():
     raw = [
         {"full_name": "o/go", "language": "Go", "size": 100, "default_branch": "main"},

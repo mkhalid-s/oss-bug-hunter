@@ -472,7 +472,7 @@ oss-bug-hunter/
     webapp/                        ← React + Vite + Mantine SPA (built to dist/, served at /app; no Node at runtime)
     web/                           ← legacy U0 dashboard page (index.html + app.js + style.css; + runs.html SSE demo)
     requirements.txt
-  tests/                           ← pytest cases (228–229 green; toolchain e2e tests skip-guard where a compiler is absent)
+  tests/                           ← pytest cases (322 green; toolchain e2e tests skip-guard where a compiler is absent)
     conftest.py                    ← loads dash-named scripts via importlib
     test_spike_harness.py          ← the engine: adapters, backends, orchestrate, multi-language e2e (Java/Python/Go/Rust/JS)
     test_endpoints.py              ← FastAPI TestClient smoke suite (auth, findings, targets, SSE, /api/orchestrate)
@@ -486,7 +486,7 @@ oss-bug-hunter/
 **Running the tests:**
 
 ```bash
-.venv/bin/python -m pytest tests/        # full suite (228–229; toolchain e2e tests skip-guard)
+.venv/bin/python -m pytest tests/        # full suite (322; toolchain e2e tests skip-guard)
 .venv/bin/python -m pytest tests/ -v     # verbose
 .venv/bin/python -m pytest tests/test_find_match.py  # single file
 ```

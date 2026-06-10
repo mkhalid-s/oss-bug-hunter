@@ -126,7 +126,7 @@ def score_candidate(c: dict) -> float:
 # the language stats; a CMake/autoconf file in the tree is the secondary hint.
 _NATIVE_LANGS = {"c", "c++", "cuda", "assembly", "fortran", "objective-c", "objective-c++"}
 _NATIVE_TREE = re.compile(r"(^|/)(CMakeLists\.txt|configure\.ac|configure\.in|Makefile\.am)$"
-                          r"|\.(cmake|cc|cxx)$")
+                          r"|\.(cmake|cc|cxx|cpp|cu|hpp)$")
 NATIVE_FRACTION = 0.25
 
 _TEST_PATTERNS = [
@@ -162,10 +162,18 @@ def enrich_candidate(c: dict, detail: dict) -> dict:
     idempotent, and it never overwrites a value a curated source already set (None = unknown)."""
     langs = (detail or {}).get("languages") or {}
     paths = (detail or {}).get("tree_paths") or []
-    if c.get("has_tests") is None:
+    # a TRUNCATED git tree (GitHub caps recursive listing at ~100k entries) is partial — deriving
+    # has_tests=False / native-from-tree=False off it would be a wrong answer, not an unknown one.
+    # The languages API is complete, so it still rules native_heavy IN; we just don't rule it OUT
+    # from a partial tree, and leave has_tests unknown (None = False-safe in the gate). (#59 review)
+    truncated = bool((detail or {}).get("tree_truncated"))
+    if c.get("has_tests") is None and not truncated:
         c["has_tests"] = _has_tests_in_tree(paths)
     if c.get("native_heavy") is None:
-        c["native_heavy"] = _native_heavy_from_languages(langs) or _native_build_in_tree(paths)
+        if _native_heavy_from_languages(langs):
+            c["native_heavy"] = True
+        elif not truncated:
+            c["native_heavy"] = _native_build_in_tree(paths)
     return c
 
 
@@ -312,7 +320,8 @@ class GitHubSearchSource(Source):
         langs = self._gh_api(f"repos/{repo}/languages") or {}
         tree = self._gh_api(f"repos/{repo}/git/trees/{branch}", params={"recursive": "1"}) or {}
         return {"languages": langs,
-                "tree_paths": [e.get("path", "") for e in tree.get("tree", [])]}
+                "tree_paths": [e.get("path", "") for e in tree.get("tree", [])],
+                "tree_truncated": bool(tree.get("truncated"))}   # partial tree → enrich leaves unknown
 
 
 def discover(sources, *, limit: int = 20, denylist=(), allowlist=None, existing=None,

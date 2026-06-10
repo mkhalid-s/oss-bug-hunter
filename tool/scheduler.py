@@ -8,9 +8,10 @@ INJECTABLE (the `Steps` protocol) so the loop logic is hermetic + testable; the 
 draft (the human approves + pushes, §12.6).
 
 HONEST STATUS: the loop STRUCTURE (budget / idempotency / audit / kill-switch / dispatch)
-is built + tested here. A full real run is gated on M5 env-bootstrap (#46-49) and a
-hunt step for real repos (the vendored Anthropic skills, run in Claude Code) + a host
-with open network — so `EngineSteps.bootstrap`/`hunt` are TODO and raise.
+is built + tested here. `EngineSteps.hunt` IS wired (#61, via tool/hunt.py → vuln-scan →
+ingest); `EngineSteps.bootstrap` is a no-op pass-through — the real env-bootstrap runs inside
+the engine's `_maybe_bootstrap` on the verify/fix path (#62/#63); wiring it into the loop
+BEFORE hunt is a follow-on. A full live run still needs the model + an open-network host.
 """
 from __future__ import annotations
 

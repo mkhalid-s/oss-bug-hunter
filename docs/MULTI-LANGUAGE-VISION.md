@@ -1143,6 +1143,62 @@ Proven with 5 thread tests: reentrancy, different-keys-don't-block, same-key-ser
 pipeline_lock still works, and — the real fix — concurrent `_set_gate` on one scaffold (50×2
 iterations) never loses an update or tears the YAML. **319 tests.**
 
+### 11.35 Standard review (7 perspectives) + fixes (2026-06-10)
+Ran a 7-perspective Standard review (local Claude agents — Bedrock had no creds in the sandbox)
+over the session's 6 commits before pushing. Verdict: no P0; the security-critical claims
+(`container_env` can't leak GH_TOKEN, untrusted installs never run on the host, lock ordering
+acyclic) were independently VERIFIED correct.
+
+**P1 (consensus 5/7) — fixed.** `pristine()`'s manifest guard (#63) matched `Path(p).name` against
+`git clean -fdn` output, but git COLLAPSES a wholly-untracked directory to a single entry
+(`Would remove crates/`) — so a nested `crates/<x>/Cargo.toml` slipped the guard and the real
+`git clean` would delete it. That is the exact data loss the guard exists to prevent, and it
+collides with the multi-crate workspace layout #51 added. Fix: the dry-run runs with
+`core.quotePath=false` (parse non-ASCII names) and descends into any reported directory (pruning
+build/cache dirs via `_SCAN_SKIP` to stay fast), refusing if a primary manifest lives anywhere
+beneath it. Regression test added (`test_pristine_guard_refuses_manifest_in_untracked_subdir`).
+
+**Bundled P2s — fixed.** `_NATIVE_TREE` now matches `.cpp/.cu/.hpp` (the dominant C/C++/CUDA
+extensions it missed); GitHub enrichment treats a TRUNCATED git tree as unknown (leaves
+`has_tests`/`native_heavy` `None`, never a false `False` from a partial listing) while the
+complete languages API can still rule `native_heavy` in; `container_cache_env` is now called via
+`getattr(..., lambda w: {})` so a future adapter that omits it can't `AttributeError` mid-run. The
+load-bearing `_container_run_step` in-container glue gained a routing test. **322 tests.**
+
+**Advisory (deferred — see REVIEW.md).** Rust `_resolve_crate`'s "first lib member" is a
+load-bearing heuristic (a multi-lib workspace whose buggy crate isn't first picks the wrong one —
+a known limit until crate selection is driven by the finding's component); the #25 batch writers
+still hold the global `pipeline_lock` (the shard's win lands on the orchestrate path — coherence,
+not a defect); per-key lock files accumulate under `cell-1/.locks/` (swept by `make clean`); plus
+minor test/doc gaps. None block a push.
+
+### 11.36 Deep review (12 perspectives) + P0 fix (2026-06-10)
+A full 12-perspective deep re-review of the post-Standard-fix state ("review again fully"). It
+caught a **P0 that the Standard review's OWN pristine fix had introduced**: the `_SCAN_SKIP`
+shortcut skipped walking any reported untracked dir named `build`/`dist`/`target` — but those are
+legal crate/package/module dir names, so an untracked `build/Cargo.toml` was collapsed by `git
+clean -fdn` to one line, skipped, and deleted (devils-advocate reproduced it live). A symlink
+variant (`is_dir()` follows a symlink → `os.walk` walks the whole filesystem) was also found.
+
+**Fix:** `pristine()` now uses `git status --porcelain --untracked-files=all` — it lists every
+untracked file INDIVIDUALLY (no dir-collapse, no symlink-follow, no `os.walk`/`_SCAN_SKIP`),
+excludes the preserved caches by pathspec + a path-parts check, and uses `core.quotePath=false`.
+The regression test covers the `build/`-named-dir manifest, a non-traversed symlink, and a
+still-cleaned build dir. Simpler than the walk approach (the simplifier's suggestion) and closes
+both holes.
+
+**Also fixed:** `pytest.ini` (`testpaths=tests`) so a bare `pytest` no longer collects the cloned
+`targets/` repos; the stale "hunt is unwired/TODO" text in the scheduler module docstring +
+`schedule --run` help (hunt was wired in #61; bootstrap is a documented no-op); README count 228→322.
+
+**Filed as follow-ons (roadmap-scope, not push-blockers):** **#64** thread a `component`
+(dir/language) through the finding schema so monorepo/workspace targets resolve the right component
+(retires the Rust "first lib member" heuristic, fixes all languages); **#65** wire env-bootstrap
+into the scheduler loop before hunt (today `EngineSteps.bootstrap` is a no-op); **#66** a
+`HarnessAdapter` Protocol/ABC + derive the pristine cache keep-set from the adapters (drop the
+`getattr` defaults). The security-critical invariants were re-verified correct. Critic verdict:
+**push-ready**. **322 tests.**
+
 ---
 
 ## 12. Autonomy roadmap — toward unattended OSS bug-hunting (PROPOSED)

@@ -1426,7 +1426,7 @@ def _cli(argv: list[str] | None = None) -> int:
     sch.add_argument("--queue", default=None, help="discovery queue file (default cell-1/hunt/discovery-queue.yaml)")
     sch.add_argument("--max-targets", type=int, default=5)
     sch.add_argument("--max-attempts", type=int, default=1)
-    sch.add_argument("--run", action="store_true", help="execute for real (EngineSteps clones repos + currently stops at the unwired hunt step)")
+    sch.add_argument("--run", action="store_true", help="execute for real (EngineSteps: clone + hunt (wired #61) + verify/fix/draft; a live run needs the model + an open-network host)")
 
     args = p.parse_args(argv)
 
