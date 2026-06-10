@@ -436,6 +436,20 @@ missed.
   skipping on absence — they skip ONLY when the language toolchain is missing. Proven by
   deleting a working copy and watching the go e2e rebuild it from `_src` and pass. +1 test →
   **suite 303**. See §11.31.
+- **#59 — GitHub candidate enrichment + per-source rate-limiting (the §12.3 follow-on)**:
+  `discovery.GitHubSearchSource` now populates the two biggest selection levers the search API
+  omits — `has_tests` and `native_heavy` — via an injectable `detail(candidate)` fetcher
+  (default: `gh api repos/.../languages` + the git tree). Pure heuristics decide each
+  (`_native_heavy_from_languages` ≥25% C/C++/CUDA/… or CMake/autoconf in the tree;
+  `_has_tests_in_tree` across go/maven/pytest/jest/rspec); `enrich_candidate` is idempotent and
+  never clobbers a curated value. Enrichment runs ONLY for plausibly-eligible repos (cheap
+  lang/size/archived gate first — no API call wasted on a repo discover would reject) and is
+  best-effort (a failed call leaves the fields unknown → False-safe). So the heaviness HARD GATE
+  now bites GitHub results too (a CMake-heavy repo is rejected, not cloned). New `RateLimiter`
+  (per-source `min_interval` pacing + backoff-and-retry on a `RateLimitError`, injectable
+  clock/sleep) wraps every gh call; `gh api` non-zero with rate-limit/403/429 → `RateLimitError`.
+  CLI: `discover --no-enrich` + `--rate-limit SEC`. +8 tests → **suite 311**. The live gh path is
+  host-only (no GH access here). See §11.32.
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 

@@ -11,6 +11,7 @@ from __future__ import annotations
 import datetime as _dt
 import json
 import re
+import time
 from pathlib import Path
 
 import yaml
@@ -78,9 +79,10 @@ OVERSIZE_KB = 500_000
 def _eligible(c: dict) -> bool:
     """HARD GATE (not a score term): only enqueue repos the engine can actually hunt
     and build here. A high star count must NOT rescue an unsupported language or a
-    heavy/oversize repo (the headroom lesson). NOTE: `native_heavy`/`has_tests` are only
-    known for CURATED (JsonSource) rows today — GitHub search can't populate them, so
-    enrichment is a follow-on; the language + size gates DO apply to GitHub candidates."""
+    heavy/oversize repo (the headroom lesson). `native_heavy` (and `has_tests`) are populated
+    for curated rows AND for GitHub candidates via enrichment (#59), so the heaviness gate now
+    bites GitHub results too — a repo whose native build we can't resolve here is rejected, not
+    hunted. (size + language gates always apply; native_heavy/archived stay unknown→False-safe.)"""
     if _norm_lang(c.get("language")) not in SUPPORTED:
         return False
     if c.get("native_heavy") or c.get("archived"):
@@ -114,6 +116,101 @@ def score_candidate(c: dict) -> float:
     return round(score, 2)
 
 
+# --- GitHub enrichment (#59) -------------------------------------------------------------
+# The search API gives stars/size/license but NOT the two biggest selection levers: does the
+# repo have a test bed, and is it a heavy native build? We derive them from two cheap follow-up
+# calls (repos/.../languages + the git tree). Heuristics are pure + unit-testable.
+
+# A big share of these languages means a slow/heavy native build (the headroom lesson — ONNX/
+# codecs). A Rust/Go crate that DOWNLOADS native deps at build time (ort-sys) won't show up in
+# the language stats; a CMake/autoconf file in the tree is the secondary hint.
+_NATIVE_LANGS = {"c", "c++", "cuda", "assembly", "fortran", "objective-c", "objective-c++"}
+_NATIVE_TREE = re.compile(r"(^|/)(CMakeLists\.txt|configure\.ac|configure\.in|Makefile\.am)$"
+                          r"|\.(cmake|cc|cxx)$")
+NATIVE_FRACTION = 0.25
+
+_TEST_PATTERNS = [
+    re.compile(r"(^|/)tests?/"),                            # test/ tests/ (most ecosystems)
+    re.compile(r"(^|/)src/test/"),                          # maven/gradle (java)
+    re.compile(r"(^|/)spec/"),                              # rspec / jasmine
+    re.compile(r"_test\.go$"),                              # go
+    re.compile(r"(^|/)test_[^/]+\.py$|[^/]+_test\.py$"),    # pytest
+    re.compile(r"\.(test|spec)\.(m?js|cjs|ts|tsx|jsx)$"),   # jest/node/vitest
+]
+
+
+def _native_heavy_from_languages(langs) -> bool:
+    total = sum(_num(v) for v in (langs or {}).values())
+    if total <= 0:
+        return False
+    native = sum(_num(v) for k, v in langs.items()
+                 if str(k).strip().lower() in _NATIVE_LANGS)
+    return (native / total) >= NATIVE_FRACTION
+
+
+def _native_build_in_tree(paths) -> bool:
+    return any(_NATIVE_TREE.search(str(p)) for p in (paths or []))
+
+
+def _has_tests_in_tree(paths) -> bool:
+    return any(pat.search(str(p)) for p in (paths or []) for pat in _TEST_PATTERNS)
+
+
+def enrich_candidate(c: dict, detail: dict) -> dict:
+    """Populate has_tests + native_heavy on a candidate from a detail dict
+    {languages:{lang:bytes}, tree_paths:[...]} (GitHub repos/.../languages + git tree). Pure +
+    idempotent, and it never overwrites a value a curated source already set (None = unknown)."""
+    langs = (detail or {}).get("languages") or {}
+    paths = (detail or {}).get("tree_paths") or []
+    if c.get("has_tests") is None:
+        c["has_tests"] = _has_tests_in_tree(paths)
+    if c.get("native_heavy") is None:
+        c["native_heavy"] = _native_heavy_from_languages(langs) or _native_build_in_tree(paths)
+    return c
+
+
+class RateLimitError(RuntimeError):
+    """Raised by a fetcher when the API signals throttling; `retry_after` = seconds to wait."""
+
+    def __init__(self, msg, *, retry_after: float = 2.0):
+        super().__init__(msg)
+        self.retry_after = retry_after
+
+
+class RateLimiter:
+    """Per-source pacing (#59): enforce a minimum interval between calls AND retry with backoff
+    when a call raises RateLimitError (the API said 'slow down'). The backoff IS the real
+    protection and is always on; `min_interval` is proactive politeness (default 0 = off, since
+    a single discover run is ≤ 1 search + per_page detail calls, well under the budget).
+    Injectable now()/sleep() keep tests instant + deterministic. State is per-instance → per
+    source; the cross-RUN cadence is the scheduler's Budget (§12.5), not here."""
+
+    def __init__(self, *, min_interval: float = 0.0, max_retries: int = 3,
+                 now=time.monotonic, sleep=time.sleep):
+        self.min_interval, self.max_retries = min_interval, max_retries
+        self._now, self._sleep, self._last = now, sleep, None
+
+    def _pace(self) -> None:
+        if self._last is not None and self.min_interval > 0:
+            wait = self.min_interval - (self._now() - self._last)
+            if wait > 0:
+                self._sleep(wait)
+        self._last = self._now()
+
+    def call(self, fn):
+        """Pace, then run fn; on RateLimitError back off `retry_after` and retry (≤ max_retries)."""
+        attempt = 0
+        while True:
+            self._pace()
+            try:
+                return fn()
+            except RateLimitError as e:
+                attempt += 1
+                if attempt > self.max_retries:
+                    raise
+                self._sleep(max(e.retry_after, 0.0))
+
+
 class Source:
     """A discovery source returning candidate dicts: {repo|url, language, license?,
     stars?, pushed_at?, has_tests?, size_kb?, native_heavy?, archived?, source?}."""
@@ -138,19 +235,43 @@ class JsonSource(Source):
 
 
 class GitHubSearchSource(Source):
-    """GitHub repo search (NETWORK, read-only). `fetch(query) -> list[raw repo dict]`
-    is injectable so tests stay hermetic; the default shells `gh api
-    search/repositories` with GH_TOKEN dropped + the public host forced (the
-    enterprise EMU token can't see public repos). Never clones/pushes. NOTE:
-    per-source RATE-LIMITING is the scheduler's job (§12.5) and is NOT enforced
-    here yet — single-query use only until then."""
+    """GitHub repo search (NETWORK, read-only). Two injectable fetchers keep tests hermetic:
+    `fetch(query) -> list[raw repo dict]` (the search) and `detail(candidate) -> {languages,
+    tree_paths}` (the #59 enrichment). Defaults shell `gh api` with GH_TOKEN dropped + the public
+    host forced (the enterprise EMU token can't see public repos). Every call goes through a
+    per-source RateLimiter (#59: pacing + backoff-on-throttle). Never clones/pushes.
+
+    search() maps each result, then — for plausibly-eligible repos ONLY (the cheap language/
+    size/archived gate, so no API call is wasted on a repo discover would reject) — enriches
+    has_tests + native_heavy. Enrichment is best-effort: a failed detail call leaves them
+    unknown (None), which is False-safe in the gate."""
     name = "github"
 
-    def __init__(self, query: str, *, fetch=None, per_page: int = 30):
-        self.query, self._fetch, self.per_page = query, fetch, per_page
+    def __init__(self, query: str, *, fetch=None, detail=None, per_page: int = 30,
+                 limiter=None, enrich: bool = True):
+        self.query, self._fetch, self._detail = query, fetch, detail
+        self.per_page, self.enrich = per_page, enrich
+        self.limiter = limiter or RateLimiter()
 
     def search(self) -> list:
-        return [self._map(r) for r in (self._fetch or self._gh_fetch)(self.query)]
+        raw = self.limiter.call(lambda: (self._fetch or self._gh_fetch)(self.query))
+        cands = [self._map(r) for r in raw]
+        if self.enrich:
+            detail = self._detail or self._gh_detail
+            for c in cands:
+                if not self._enrichable(c):
+                    continue            # don't spend an API call on a repo we'd reject anyway
+                try:
+                    enrich_candidate(c, self.limiter.call(lambda c=c: detail(c)))
+                except Exception:
+                    pass                # best-effort: unknown has_tests/native_heavy is fine
+        return cands
+
+    @staticmethod
+    def _enrichable(c: dict) -> bool:
+        # the gates that need no network — only spend a detail call on a plausibly-eligible repo.
+        return (_norm_lang(c.get("language")) in SUPPORTED and not c.get("archived")
+                and _num(c.get("size_kb")) <= OVERSIZE_KB)
 
     @staticmethod
     def _map(r: dict) -> dict:
@@ -160,21 +281,38 @@ class GitHubSearchSource(Source):
                 "url": r.get("html_url") or r.get("clone_url"),
                 "language": r.get("language"), "license": lic,
                 "stars": r.get("stargazers_count"), "pushed_at": r.get("pushed_at"),
-                "size_kb": r.get("size"), "archived": r.get("archived"), "source": "github"}
+                "size_kb": r.get("size"), "archived": r.get("archived"),
+                "default_branch": r.get("default_branch"), "source": "github"}
 
-    def _gh_fetch(self, query):  # pragma: no cover - network path, not run in tests
+    # ---- default network fetchers (gh CLI; #pragma: not exercised in tests — injected there) ----
+    def _gh_api(self, path, *, params=None):  # pragma: no cover - network
         import os
         import subprocess
-        # GH_TOKEN pins gh to the ENTERPRISE (EMU) account, which can't see public
-        # GitHub — drop it so search uses the registered personal account + public host.
+        # GH_TOKEN pins gh to the ENTERPRISE (EMU) account, which can't see public GitHub —
+        # drop it so calls use the registered personal account + the public host.
         env = {k: v for k, v in os.environ.items() if k != "GH_TOKEN"}
-        r = subprocess.run(["gh", "api", "--hostname", "github.com", "-X", "GET",
-                            "search/repositories", "-f", f"q={query}",
-                            "-f", f"per_page={self.per_page}"],
-                           capture_output=True, text=True, timeout=30, env=env)
+        argv = ["gh", "api", "--hostname", "github.com", "-X", "GET", path]
+        for k, v in (params or {}).items():
+            argv += ["-f", f"{k}={v}"]
+        r = subprocess.run(argv, capture_output=True, text=True, timeout=30, env=env)
         if r.returncode != 0:           # do NOT return [] silently (looks like "no results")
-            raise RuntimeError(f"gh search failed (rc={r.returncode}): {(r.stderr or '')[:200]}")
-        return (json.loads(r.stdout) or {}).get("items", [])
+            msg, low = (r.stderr or "")[:300], (r.stderr or "").lower()
+            if "rate limit" in low or "429" in low or "403" in low:
+                raise RateLimitError(f"gh rate-limited on {path}: {msg}")
+            raise RuntimeError(f"gh api {path} failed (rc={r.returncode}): {msg}")
+        return json.loads(r.stdout) if (r.stdout or "").strip() else None
+
+    def _gh_fetch(self, query):  # pragma: no cover - network
+        data = self._gh_api("search/repositories",
+                            params={"q": query, "per_page": str(self.per_page)})
+        return (data or {}).get("items", [])
+
+    def _gh_detail(self, c):  # pragma: no cover - network
+        repo, branch = c["repo"], c.get("default_branch") or "HEAD"
+        langs = self._gh_api(f"repos/{repo}/languages") or {}
+        tree = self._gh_api(f"repos/{repo}/git/trees/{branch}", params={"recursive": "1"}) or {}
+        return {"languages": langs,
+                "tree_paths": [e.get("path", "") for e in tree.get("tree", [])]}
 
 
 def discover(sources, *, limit: int = 20, denylist=(), allowlist=None, existing=None,

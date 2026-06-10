@@ -1066,6 +1066,34 @@ skip only when the language toolchain (go/cargo/node/uv) is missing. Proven end-
 deleting the gobug-demo working copy (leaving only `_src`) and running the go e2e test: it
 rebuilt the repo from `_src` and passed. **303 tests.**
 
+### 11.32 #59 — GitHub candidate enrichment + rate-limiting (2026-06-10)
+The §12.3 follow-on. GitHub repo-search returns stars/size/license but NOT the two strongest
+selection signals: does the repo have a test bed (the blog's #1 efficacy lever), and is it a
+heavy native build (the headroom lesson)? Until now those were known only for curated JsonSource
+rows, so `_eligible`/`score_candidate` flew half-blind on GitHub candidates.
+
+**Enrichment.** `GitHubSearchSource` gained an injectable `detail(candidate) -> {languages,
+tree_paths}` fetcher (default: `gh api repos/<r>/languages` + `git/trees/<default_branch>?recursive=1`).
+Pure, unit-tested heuristics turn that into fields: `_native_heavy_from_languages` (≥25% of bytes
+in C/C++/CUDA/Fortran/ObjC → heavy) OR a CMake/autoconf/`.cc` file in the tree; `_has_tests_in_tree`
+(`test/`·`tests/`·`src/test/`·`spec/`, `_test.go`, `test_*.py`/`*_test.py`, `*.test|spec.{js,ts,…}`).
+`enrich_candidate` is pure + idempotent and never overwrites a value a curated source already set
+(None = unknown). Crucially, enrichment runs ONLY for repos that pass the cheap, network-free gate
+(supported language, not archived, within size) — so no API call is spent on a repo `discover`
+would reject anyway — and it is best-effort (a failed `detail` call leaves the fields unknown,
+which is False-safe in the gate). Net effect: the heaviness HARD GATE now bites GitHub results, not
+just curated ones.
+
+**Rate-limiting.** A new per-source `RateLimiter` wraps every gh call: a `min_interval` pace
+(proactive, default off) plus the real protection — catch `RateLimitError` (raised when `gh api`
+returns a rate-limit/403/429) and retry with the API's backoff, up to `max_retries`. Clock + sleep
+are injectable, so pacing and backoff are tested instantly + deterministically. State is
+per-source-instance; cross-RUN cadence stays the scheduler's Budget (§12.5).
+
+CLI: `discover --github <q> [--no-enrich] [--rate-limit SEC]`. The live gh path is host-only here
+(no public-GitHub access in the sandbox, and we drop the enterprise-pinned GH_TOKEN anyway), so it
+is `# pragma: no cover`; everything else is exercised by 8 new hermetic tests. **311 tests.**
+
 ---
 
 ## 12. Autonomy roadmap — toward unattended OSS bug-hunting (PROPOSED)

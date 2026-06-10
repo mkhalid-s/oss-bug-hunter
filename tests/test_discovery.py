@@ -123,3 +123,100 @@ def test_malformed_candidate_tolerated(tmp_path):
     ]
     keys = {c["repo"] for c in d.discover([_src(tmp_path, rows)], existing=set())}
     assert keys == {"o/ok", "o/two"}   # string numerics coerced to 0, non-dict skipped — no crash
+
+
+# ---- #59: GitHub enrichment (has_tests / native_heavy) + per-source rate-limiting ----
+
+def test_native_heavy_from_languages():
+    assert d._native_heavy_from_languages({"C++": 800, "Python": 200}) is True    # 80% native
+    assert d._native_heavy_from_languages({"Python": 1000, "C": 50}) is False      # <25% native
+    assert d._native_heavy_from_languages({"Go": 1000}) is False
+    assert d._native_heavy_from_languages({}) is False                             # unknown → not heavy
+
+
+def test_has_tests_in_tree():
+    assert d._has_tests_in_tree(["src/main.go", "foo_test.go"])                    # go
+    assert d._has_tests_in_tree(["src/test/java/AppTest.java"])                    # maven layout
+    assert d._has_tests_in_tree(["lib/index.js", "index.test.ts"])                 # jest/vitest
+    assert d._has_tests_in_tree(["tests/test_x.py"])                               # pytest dir
+    assert not d._has_tests_in_tree(["src/main.go", "README.md"])                  # none
+
+
+def test_enrich_candidate_merges_without_clobbering():
+    c = {"repo": "o/x", "language": "go"}                                          # both unknown
+    d.enrich_candidate(c, {"languages": {"Go": 1000}, "tree_paths": ["foo_test.go"]})
+    assert c["has_tests"] is True and c["native_heavy"] is False
+    # a value a curated source already set is preserved (only None = unknown gets filled)
+    c2 = {"has_tests": False, "native_heavy": True}
+    d.enrich_candidate(c2, {"languages": {"Go": 1000}, "tree_paths": ["foo_test.go"]})
+    assert c2["has_tests"] is False and c2["native_heavy"] is True
+    # CMake in the tree flags native_heavy even when languages look benign
+    c3 = {"repo": "o/y", "language": "rust"}
+    d.enrich_candidate(c3, {"languages": {"Rust": 1000}, "tree_paths": ["CMakeLists.txt"]})
+    assert c3["native_heavy"] is True
+
+
+def test_github_source_enriches_only_eligible_repos():
+    raw = [
+        {"full_name": "o/go", "language": "Go", "size": 100, "default_branch": "main"},
+        {"full_name": "o/cpp", "language": "C++", "size": 100},        # unsupported → don't enrich
+        {"full_name": "o/huge", "language": "go", "size": 900000},     # oversize → don't enrich
+    ]
+    seen = []
+
+    def detail(c):
+        seen.append(c["repo"])
+        return {"languages": {"Go": 1000}, "tree_paths": ["x_test.go"]}
+
+    cands = d.GitHubSearchSource("q", fetch=lambda q: raw, detail=detail).search()
+    by = {c["repo"]: c for c in cands}
+    assert by["o/go"]["has_tests"] is True                             # eligible repo enriched
+    assert seen == ["o/go"]                                            # ONLY it cost a detail call
+
+
+def test_github_enrichment_best_effort_on_detail_failure():
+    raw = [{"full_name": "o/go", "language": "Go", "size": 100}]
+
+    def boom(c):
+        raise RuntimeError("network down")
+
+    c = d.GitHubSearchSource("q", fetch=lambda q: raw, detail=boom).search()[0]
+    assert c.get("has_tests") is None and c.get("native_heavy") is None   # unknown, no crash
+
+
+def test_github_enrichment_feeds_hard_gate(tmp_path):
+    # an enriched native-heavy GitHub repo is REJECTED by discover's hard gate.
+    raw = [{"full_name": "o/native", "language": "rust", "size": 100, "default_branch": "main"}]
+    src = d.GitHubSearchSource(
+        "q", fetch=lambda q: raw,
+        detail=lambda c: {"languages": {"C++": 900, "Rust": 100}, "tree_paths": ["CMakeLists.txt"]})
+    assert d.discover([src], existing=set()) == []                     # native_heavy → gated out
+
+
+def test_rate_limiter_paces_with_fake_clock():
+    clock, slept = {"t": 0.0}, []
+    rl = d.RateLimiter(min_interval=10.0, now=lambda: clock["t"], sleep=lambda s: slept.append(s))
+    assert rl.call(lambda: "a") == "a" and slept == []                 # first call: no pacing
+    rl.call(lambda: "b")                                               # immediately after → sleep ~10
+    assert len(slept) == 1 and abs(slept[0] - 10.0) < 1e-9
+
+
+def test_rate_limiter_backoff_then_succeed_and_giveup():
+    slept, calls = [], {"n": 0}
+
+    def flaky():
+        calls["n"] += 1
+        if calls["n"] < 3:
+            raise d.RateLimitError("slow down", retry_after=5.0)
+        return "ok"
+
+    rl = d.RateLimiter(max_retries=2, now=lambda: 0.0, sleep=lambda s: slept.append(s))
+    assert rl.call(flaky) == "ok" and calls["n"] == 3 and slept == [5.0, 5.0]   # 2 backoffs, then ok
+
+    import pytest
+
+    def always():
+        raise d.RateLimitError("nope")
+    rl2 = d.RateLimiter(max_retries=1, now=lambda: 0.0, sleep=lambda s: None)
+    with pytest.raises(d.RateLimitError):                              # exceeds retries → re-raised
+        rl2.call(always)

@@ -1362,6 +1362,8 @@ def _cli(argv: list[str] | None = None) -> int:
     dsc.add_argument("--deny", nargs="*", default=[], help="owner/name repos to skip")
     dsc.add_argument("--allow", nargs="*", default=None, help="restrict to these owners or owner/name repos")
     dsc.add_argument("--enqueue", action="store_true", help="persist the ranked queue for the scheduler")
+    dsc.add_argument("--no-enrich", action="store_true", help="skip GitHub enrichment (has_tests/native_heavy via repos/.../languages + git tree) — cheaper, fewer API calls")
+    dsc.add_argument("--rate-limit", type=float, default=0.0, metavar="SEC", help="min seconds between GitHub API calls (per-source pacing; backoff-on-throttle is always on)")
 
     sch = sub.add_parser("schedule", help="Outer loop (§12.5): consume the discovery queue → clone → hunt → fix → draft (budgeted, idempotent, NEVER pushes). Default DRY-RUN; --run executes (gated on the hunt step).")
     sch.add_argument("--queue", default=None, help="discovery queue file (default cell-1/hunt/discovery-queue.yaml)")
@@ -1430,7 +1432,9 @@ def _cli(argv: list[str] | None = None) -> int:
         if args.json:
             srcs.append(_disc.JsonSource(args.json))
         if args.github:
-            srcs.append(_disc.GitHubSearchSource(args.github))
+            srcs.append(_disc.GitHubSearchSource(
+                args.github, enrich=not args.no_enrich,
+                limiter=_disc.RateLimiter(min_interval=args.rate_limit)))   # #59
         if not srcs:
             result = {"ok": False, "error": "provide --json <file> and/or --github <query>"}
         else:
