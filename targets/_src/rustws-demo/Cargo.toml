@@ -1,0 +1,4 @@
+# Virtual workspace manifest (no [package]) — exercises the adapter's #51 -p member selection.
+[workspace]
+members = ["mathx", "util"]
+resolver = "2"

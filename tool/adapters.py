@@ -12,6 +12,7 @@ from __future__ import annotations
 import re
 import shutil
 import sys
+import tomllib
 from dataclasses import dataclass
 from enum import Enum
 from pathlib import Path
@@ -216,16 +217,62 @@ class RustCargoAdapter:
         # registry cache across containers, isolated from the host's ~/.cargo.
         return {"CARGO_HOME": f"{work}/{self.CACHE_DIR}"}
 
+    @staticmethod
+    def _read_cargo(path) -> dict:
+        try:
+            with open(path, "rb") as f:
+                return tomllib.load(f)
+        except (OSError, tomllib.TOMLDecodeError):
+            return {}
+
+    def _members(self, root: Path, ws: dict) -> list:
+        """Workspace member dirs, expanding globs (e.g. 'crates/*'); each must hold a Cargo.toml."""
+        out = []
+        for pat in (ws.get("members") or []):
+            paths = sorted(root.glob(pat)) if "*" in pat else [root / pat]
+            out += [p for p in paths if (p / "Cargo.toml").is_file()]
+        return out
+
+    def _resolve_crate(self, worktree) -> tuple:
+        """Where the tests/ integration test should live + which package to target (#51):
+        - root has [package]  → (root_pkg, root)         single-crate OR root-package workspace
+        - VIRTUAL workspace   → (member_pkg, member_dir)  first lib member (it can host int. tests)
+        - neither             → (None, root)              degrade to a plain `cargo test`
+        The root may be a VIRTUAL manifest ([workspace] with no [package]); placing tests/ there
+        compiles nothing, so we descend into a member and select it with `-p`."""
+        root = Path(worktree)
+        cfg = self._read_cargo(root / "Cargo.toml")
+        pkg = (cfg.get("package") or {}).get("name")
+        if pkg:
+            return pkg, root                          # root is itself a package
+        ws = cfg.get("workspace")
+        if ws:
+            members = self._members(root, ws)
+            libs = [m for m in members if (m / "src" / "lib.rs").is_file()]
+            for m in (libs or members):               # an integration test needs a lib crate to import
+                mname = (self._read_cargo(m / "Cargo.toml").get("package") or {}).get("name")
+                if mname:
+                    return mname, m
+        return None, root
+
     def place_reproducer(self, worktree: str, test_src: str, name: str) -> str:
-        # integration test: tests/<stem>.rs (a separate crate using the public API).
+        # integration test under <crate>/tests/<stem>.rs (a separate crate using the public API).
+        # For a Cargo WORKSPACE the virtual root owns no tests → place into a member crate and
+        # target it with `-p` (#51); the selector encodes the package as "pkg::stem". A single
+        # crate (or a root-package workspace) is unchanged: plain stem, run from the root.
         stem = f"repro_{re.sub(r'[^A-Za-z0-9_]', '_', name)}"
-        d = Path(worktree) / "tests"
+        pkg, crate_dir = self._resolve_crate(worktree)
+        d = crate_dir / "tests"
         d.mkdir(parents=True, exist_ok=True)
         shutil.copy(test_src, d / f"{stem}.rs")
-        return stem                                   # selector = the test binary name
+        return f"{pkg}::{stem}" if (pkg and crate_dir != Path(worktree)) else stem
 
     def test_argv(self, selector: str, worktree=None) -> list:
-        return ["cargo", "test", "--test", selector]
+        # `-p <pkg>` runs from the workspace ROOT (the engine's cwd) — no cwd juggling needed.
+        pkg, sep, stem = selector.partition("::")
+        if sep:                                       # "pkg::stem" → workspace member (#51)
+            return ["cargo", "test", "-p", pkg, "--test", stem]
+        return ["cargo", "test", "--test", selector]  # single-crate (unchanged)
 
     def container_argv(self, selector: str, worktree=None) -> list:  # cargo is on PATH in rust image
         return self.test_argv(selector, worktree)

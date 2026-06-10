@@ -450,6 +450,15 @@ missed.
   clock/sleep) wraps every gh call; `gh api` non-zero with rate-limit/403/429 → `RateLimitError`.
   CLI: `discover --no-enrich` + `--rate-limit SEC`. +8 tests → **suite 311**. The live gh path is
   host-only (no GH access here). See §11.32.
+- **#51 — Rust adapter handles Cargo workspaces (`-p <member>` selection)**: the adapter ran
+  `cargo test --test <sel>` at the worktree root, which FAILS on a VIRTUAL workspace manifest
+  (`[workspace]` with no `[package]` — the root owns no tests). It now parses Cargo.toml
+  (`tomllib`): a root `[package]` is unchanged (single-crate path, byte-for-byte); a virtual
+  workspace descends into the first LIB member (glob members like `crates/*` expanded), places
+  the reproducer in that crate's `tests/`, and encodes the package in the selector (`pkg::stem`)
+  so `test_argv` emits `cargo test -p <pkg> --test <stem>` — run from the root, so no cwd
+  juggling. Proven on a new portable `rustws-demo` virtual workspace (members `mathx`+`util`):
+  validate_repro → FAILED, validate_fix → PASSED via `-p mathx`. +3 tests → **suite 314**. See §11.33.
 
 ## [Unreleased] — Reproducer-sandbox Dockerfile UID/GID fix
 

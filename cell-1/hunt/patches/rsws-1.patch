@@ -1,0 +1,16 @@
+diff --git a/mathx/src/lib.rs b/mathx/src/lib.rs
+index 9b4fa3f..2305993 100644
+--- a/mathx/src/lib.rs
++++ b/mathx/src/lib.rs
+@@ -1,7 +1,10 @@
+ /// Running maximum at each position.
+ pub fn running_max(xs: &[i64]) -> Vec<i64> {
++    if xs.is_empty() {
++        return Vec::new();
++    }
+     let mut out = Vec::new();
+-    let mut m = xs[0];          // BUG: panics on an empty slice (no emptiness check)
++    let mut m = xs[0];
+     for &n in xs {
+         if n > m {
+             m = n;

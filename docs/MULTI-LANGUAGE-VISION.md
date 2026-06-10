@@ -1094,6 +1094,30 @@ CLI: `discover --github <q> [--no-enrich] [--rate-limit SEC]`. The live gh path 
 (no public-GitHub access in the sandbox, and we drop the enterprise-pinned GH_TOKEN anyway), so it
 is `# pragma: no cover`; everything else is exercised by 8 new hermetic tests. **311 tests.**
 
+### 11.33 #51 — Rust adapter: Cargo workspace `-p` member selection (2026-06-10)
+The Rust adapter placed the reproducer at `<worktree>/tests/<stem>.rs` and ran `cargo test
+--test <stem>` from the root. That works for a single crate, but a Cargo WORKSPACE root is often
+a VIRTUAL manifest (`[workspace]` with no `[package]`) that owns no `tests/` target — so the
+reproducer compiled nothing and `cargo test --test` errored. `detect_components` (#50) already
+surfaces each member as a component, but the run path can still hand the adapter the workspace ROOT.
+
+`_resolve_crate(worktree)` now parses Cargo.toml with `tomllib`:
+- root has `[package]` → `(root_pkg, root)` — single-crate OR root-package workspace; unchanged.
+- virtual workspace → expand `members` (incl. globs like `crates/*`), pick the first member with a
+  `src/lib.rs` (an integration test needs a lib crate to import) → `(member_pkg, member_dir)`.
+- neither → `(None, root)` — degrade to a plain `cargo test`.
+
+`place_reproducer` drops the test into that crate's `tests/` and, for a workspace member, encodes
+the package in the selector as `pkg::stem`; `test_argv` decodes it to `cargo test -p <pkg> --test
+<stem>`. Because `-p` resolves from the workspace root, the command runs at the engine's existing
+cwd (the worktree root) — no cwd manipulation needed (the "+cwd" half of the task is satisfied by
+NOT needing one). Single-crate selectors stay a bare `stem`, so rustbug-demo is byte-for-byte
+unchanged.
+
+Proven on a new portable `rustws-demo` virtual workspace (members `mathx` (buggy lib) + `util`):
+the adapter resolved `mathx`, validate_repro panicked (FAILED) and validate_fix PASSED via
+`cargo test -p mathx`. Plus hermetic tests for resolution / selector / glob-members. **314 tests.**
+
 ---
 
 ## 12. Autonomy roadmap — toward unattended OSS bug-hunting (PROPOSED)

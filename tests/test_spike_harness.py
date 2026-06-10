@@ -613,6 +613,58 @@ def test_rust_adapter_validates_synthetic_target():
     assert vf.outcome is rh.Outcome.PASSED         # fix works
 
 
+# ---- #51: Rust adapter workspace (-p member) selection ----
+def test_rust_workspace_resolve_and_selector(tmp_path):
+    a = _adapters.get_adapter("rust")
+    src = tmp_path / "t.rs"; src.write_text("#[test]\nfn t(){}\n")
+    # (1) single-crate / root-package → plain stem, NO -p (byte-for-byte unchanged)
+    solo = tmp_path / "solo"; solo.mkdir()
+    (solo / "Cargo.toml").write_text('[package]\nname="solo"\nversion="0.0.0"\n')
+    sel = a.place_reproducer(str(solo), str(src), "x-1")
+    assert sel == "repro_x_1" and (solo / "tests" / "repro_x_1.rs").exists()
+    assert a.test_argv(sel) == ["cargo", "test", "--test", "repro_x_1"]
+    # (2) VIRTUAL workspace ([workspace], no [package]) → place into the LIB member + encode -p
+    ws = tmp_path / "ws"
+    (ws / "liba" / "src").mkdir(parents=True)
+    (ws / "appb" / "src").mkdir(parents=True)
+    (ws / "Cargo.toml").write_text('[workspace]\nmembers=["appb","liba"]\n')   # appb listed first
+    (ws / "liba" / "Cargo.toml").write_text('[package]\nname="liba"\nversion="0.0.0"\n')
+    (ws / "liba" / "src" / "lib.rs").write_text("pub fn f(){}\n")
+    (ws / "appb" / "Cargo.toml").write_text('[package]\nname="appb"\nversion="0.0.0"\n')
+    (ws / "appb" / "src" / "main.rs").write_text("fn main(){}\n")              # a bin, can't host int. tests
+    sel2 = a.place_reproducer(str(ws), str(src), "ws-9")
+    assert sel2 == "liba::repro_ws_9"                                          # picked the LIB, not appb
+    assert (ws / "liba" / "tests" / "repro_ws_9.rs").exists()
+    assert a.test_argv(sel2) == ["cargo", "test", "-p", "liba", "--test", "repro_ws_9"]
+    assert a.container_argv(sel2) == ["cargo", "test", "-p", "liba", "--test", "repro_ws_9"]
+
+
+def test_rust_workspace_glob_members(tmp_path):
+    a = _adapters.get_adapter("rust")
+    (tmp_path / "Cargo.toml").write_text('[workspace]\nmembers=["crates/*"]\n')
+    (tmp_path / "crates" / "core" / "src").mkdir(parents=True)
+    (tmp_path / "crates" / "core" / "Cargo.toml").write_text('[package]\nname="core"\nversion="0"\n')
+    (tmp_path / "crates" / "core" / "src" / "lib.rs").write_text("pub fn f(){}\n")
+    src = tmp_path / "t.rs"; src.write_text("#[test]\nfn t(){}\n")
+    sel = a.place_reproducer(str(tmp_path), str(src), "g-1")                   # 'crates/*' expands
+    assert sel == "core::repro_g_1" and (tmp_path / "crates" / "core" / "tests" / "repro_g_1.rs").exists()
+
+
+def test_rust_workspace_validates_synthetic_target():
+    import shutil as _sh
+    if not _sh.which("cargo"):
+        pytest.skip("cargo toolchain not present")
+    wt = str(demo_targets.materialize("rustws-demo"))   # virtual workspace: members mathx + util
+    repro = str(ROOT / "cell-1" / "hunt" / "repros" / "rsws-1.rs")
+    patch = str(ROOT / "cell-1" / "hunt" / "patches" / "rsws-1.patch")
+    v = rh.validate_repro(wt, "rsws-1", repro, trusted=True, network="none",
+                          lang="rust", log=lambda *a: None)
+    assert v.outcome is rh.Outcome.FAILED          # `cargo test -p mathx` → panic on empty slice
+    vf = rh.validate_fix(wt, "rsws-1", repro, patch, trusted=True, network="none",
+                         lang="rust", log=lambda *a: None)
+    assert vf.outcome is rh.Outcome.PASSED         # fix works via workspace -p member selection (#51)
+
+
 # ---- JS HarnessAdapter (node --test; Node is available -> end-to-end) ----
 def test_js_adapter_registered():
     assert _adapters.get_adapter("javascript") is not None
