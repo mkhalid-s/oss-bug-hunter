@@ -115,8 +115,7 @@ def pristine(worktree: str) -> str | None:
         if not ln.startswith("?? "):              # untracked only (tracked edits are reset, not deleted)
             continue
         rel = ln[3:].strip()
-        if len(rel) >= 2 and rel[0] == '"' and rel[-1] == '"':
-            rel = rel[1:-1]                       # porcelain quotes a path containing special chars
+        # core.quotePath=false suppresses git's path quoting; no quote-strip needed.
         if Path(rel).name in manifests and not (set(Path(rel).parts) & set(_CLEAN_KEEP)):
             doomed.append(rel)                    # a real manifest at ANY depth (caches filtered out)
     if doomed:
@@ -513,7 +512,8 @@ def validate_repro(worktree: str, fqcn: str, test_file: str, *,
     offline = network == "none"
 
     with worktree_lock(worktree):
-        pristine(worktree)
+        if perr := pristine(worktree):
+            return TestVerdict(Outcome.TOOL_ERROR, 0, 0, 0, 0, perr)
         place_java_reproducer(worktree, test_file, fqcn)
         try:
             return _compile_and_run_isolated(
@@ -558,7 +558,8 @@ def validate_fix(worktree: str, fqcn: str, test_file: str, patch: str, *,
     offline = network == "none"
 
     with worktree_lock(worktree):
-        pristine(worktree)
+        if perr := pristine(worktree):
+            return TestVerdict(Outcome.TOOL_ERROR, 0, 0, 0, 0, perr)
         ok, reason = check_patch_containment(worktree, patch_abs)
         if not ok:
             log(f"[harness] patch REJECTED: {reason}")

@@ -77,8 +77,22 @@ def bootstrap(worktree, adapter, *, run_step=None, network: str = "bridge", log=
         try:
             prev = json.loads(marker.read_text())
             if prev.get("status") == "ok" and prev.get("hash") == key:
-                log("[bootstrap] cached (manifests unchanged)")
-                return {"ok": True, "status": "cached", "steps_run": 0}
+                # Verify the interpreter is alive when a venv directory is present — a
+                # uv-managed Python may disappear across container rebuilds, leaving a broken
+                # symlink in .oss-venv. Only invalidate when the venv dir EXISTS but the
+                # interpreter inside it is gone; a missing venv dir means the adapter never
+                # creates one (no-venv targets or hermetic test fakes — trust the cache).
+                _venv_name = getattr(adapter, "VENV_DIR", "")
+                venv_dir = Path(worktree) / _venv_name if _venv_name else None
+                interp_ok = True
+                if venv_dir is not None and venv_dir.exists():
+                    py = getattr(adapter, "venv_python", lambda w: None)(str(worktree))
+                    if py is None or not Path(py).exists():
+                        interp_ok = False
+                        log("[bootstrap] cache stale (interpreter missing) — re-bootstrapping")
+                if interp_ok:
+                    log("[bootstrap] cached (manifests unchanged)")
+                    return {"ok": True, "status": "cached", "steps_run": 0}
         except Exception:
             pass
     runner = run_step or _local_run

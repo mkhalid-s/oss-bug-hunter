@@ -72,8 +72,12 @@ class PythonPytestAdapter:
         return fn
 
     def venv_python(self, worktree) -> str | None:
-        p = Path(worktree) / self.VENV_DIR / "bin" / "python"
-        return str(p) if p.exists() else None
+        # uv may create python3/python3.x without a bare `python` symlink — accept either.
+        for name in ("python", "python3"):
+            p = Path(worktree) / self.VENV_DIR / "bin" / name
+            if p.exists():
+                return str(p)
+        return None
 
     def bootstrap_steps(self, worktree) -> list:
         """M5: uv-based per-target venv + (editable | requirements) install. Returns []
@@ -106,8 +110,10 @@ class PythonPytestAdapter:
     def container_argv(self, selector: str, worktree=None) -> list:
         # IN-CONTAINER (cwd=/work): use the in-worktree bootstrapped venv (mounted at
         # /work/.oss-venv) when present, else the image's own python (#62).
-        py = (f"{self.VENV_DIR}/bin/python"
-              if (worktree and self.venv_python(worktree)) else "python")
+        # Use the resolved binary name from venv_python() (may be "python3") rather than
+        # hardcoding "python", since uv may not create a bare "python" symlink.
+        _vp = self.venv_python(worktree) if worktree else None
+        py = (f"{self.VENV_DIR}/bin/{Path(_vp).name}" if _vp else "python")
         return [py, "-m", "pytest", selector, "-q",
                 "-p", "no:cacheprovider", "--no-header"]
 
