@@ -89,3 +89,38 @@ def test_plan_dry_run(tmp_path):
                        budget=scheduler.Budget(max_targets=1), state_path=sp)
     assert [w["repo"] for w in p["would_process"]] == ["o/new"]    # o/done skipped, capped at 1
     assert [s["repo"] for s in p["would_skip"]] == ["o/done"]
+
+
+# ---------------------------------------------------------------------------
+# EngineSteps.clone preflight — no Docker → return None immediately
+# ---------------------------------------------------------------------------
+
+def test_engine_steps_clone_returns_none_when_no_backend(monkeypatch):
+    """Without docker/podman, clone must fail fast rather than silently succeeding
+    and blowing up hours later at validate/fix time with a BackendError."""
+    from exec_backend import BackendError
+    monkeypatch.setattr("exec_backend.select_backend",
+                        lambda trusted, **kw: (_ for _ in ()).throw(BackendError("no backend")))
+    steps = scheduler.EngineSteps()
+    assert steps.clone({"repo": "owner/repo"}) is None
+
+
+def test_engine_steps_clone_proceeds_when_backend_available(monkeypatch):
+    """When docker IS available the preflight passes and clone is attempted."""
+    import sys
+    import types as _types
+
+    fake_backend = _types.SimpleNamespace(name="docker")
+    monkeypatch.setattr("exec_backend.select_backend",
+                        lambda trusted, **kw: fake_backend)
+
+    # Stub targets so no real git clone happens; monkeypatch.setitem cleans up.
+    fake_tg = _types.SimpleNamespace(
+        add_target=lambda url, name, trusted: None,
+        get_target=lambda name: {"name": name},
+    )
+    monkeypatch.setitem(sys.modules, "targets", fake_tg)  # type: ignore[arg-type]
+
+    steps = scheduler.EngineSteps()
+    result = steps.clone({"repo": "owner/repo"})
+    assert result == "owner__repo"

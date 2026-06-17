@@ -86,6 +86,8 @@ HOST_ALLOWLIST = {h.strip() for h in os.environ.get(
     "OSS_BUG_HUNTER_HOST_ALLOWLIST", _DEFAULT_HOSTS
 ).split(",") if h.strip()}
 
+_MAX_WRITE_BYTES = 1 * 1024 * 1024  # 1 MiB — guard /api/write against oversized payloads
+
 
 @app.middleware("http")
 async def auth_and_host(request: Request, call_next):
@@ -492,6 +494,8 @@ async def run(step_id: str) -> dict:
 @app.post("/api/write/{name}")
 async def write(name: str, request: Request) -> dict:
     body = await request.body()
+    if len(body) > _MAX_WRITE_BYTES:
+        raise HTTPException(413, f"body too large ({len(body)} bytes; max {_MAX_WRITE_BYTES})")
     content = body.decode("utf-8")
     result = pl.write_file(name, content)
     if "error" in result:

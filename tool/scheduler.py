@@ -173,7 +173,14 @@ class EngineSteps(Steps):
     calls (hunt/fix builders) need the model + a host — they're live, not hermetic."""
 
     def clone(self, cand: dict) -> str | None:
+        from exec_backend import select_backend, BackendError
         import targets as _tg
+        # Untrusted repos require docker/podman. Fail here rather than silently
+        # at validate time (hours later) when no container backend is available.
+        try:
+            select_backend(trusted=False)
+        except BackendError:
+            return None
         name = (cand.get("repo") or "").replace("/", "__")
         url = cand.get("url") or f"https://github.com/{cand.get('repo')}"
         try:
