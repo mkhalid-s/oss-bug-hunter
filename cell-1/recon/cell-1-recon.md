@@ -35,4 +35,4 @@
 
 Read this report, then in Claude Code:
 
-> Drive the Explore subagent against `/workspaces/GW/OpenSource/oss-bug-hunter/cell-1/recon/` to produce the module map and refined hot-spot ranking. Update this file in place.
+> Drive the Explore subagent against `/workspaces/OpenSource/oss-bug-hunter/cell-1/recon/` to produce the module map and refined hot-spot ranking. Update this file in place.

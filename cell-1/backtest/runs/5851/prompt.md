@@ -1,7 +1,7 @@
 You are reviewing a code module for CORRECTNESS bugs (not security, not style).
 
 Working directory (already checked out at the relevant snapshot):
-  /workspaces/GW/OpenSource/oss-bug-hunter/cell-1/backtest/worktrees/5851
+  /workspaces/OpenSource/oss-bug-hunter/cell-1/backtest/worktrees/5851
 
 Files to investigate (read these in full, plus any callers/callees needed):
   - src/main/java/tools/jackson/databind/ser/bean/BeanSerializerBase.java

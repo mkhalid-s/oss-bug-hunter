@@ -4,7 +4,7 @@ re-find it, but to write a minimal, self-contained test that FAILS on the curren
 (buggy) code, proving the bug is real.
 
 Target source tree (read-only — read the file under test and its collaborators):
-  /workspaces/GW/OpenSource/oss-bug-hunter/targets/jackson-databind
+  /workspaces/OpenSource/oss-bug-hunter/targets/jackson-databind
 
 The bug under test:
   finding id : ec-1

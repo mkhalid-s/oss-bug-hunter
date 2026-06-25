@@ -288,7 +288,7 @@ def cmd_report() -> None:
     # ---- write the final report ----
     md: list[str] = []
     md.append("# Cell #1 Final Report — Jackson-databind x correctness\n\n")
-    md.append("**Phase:** 0  ·  **Cell:** #1  ·  **Owner:** mshaikh@guidewire.com\n\n")
+    md.append("**Phase:** 0  ·  **Cell:** #1  ·  **Owner:** maintainer@example.com\n\n")
     md.append(f"**Generated:** $(re-run `python3 scripts/day4-finalize.py report` to refresh)\n\n")
     md.append("**Source artifacts:**\n")
     md.append("- Recon: [cell-1/recon/cell-1-recon.md](recon/cell-1-recon.md)\n")

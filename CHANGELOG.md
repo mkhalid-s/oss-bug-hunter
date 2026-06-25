@@ -792,7 +792,7 @@ session's own regressions; fixed with tests (`tests/test_review_fixes.py`,
 ### Fix — stale `/workspaces/GW/AI` relocation paths
 
 The project was relocated from `/workspaces/GW/AI/...` to
-`/workspaces/GW/OpenSource/...`; stale absolute paths lingered. Cleaned up:
+`/workspaces/OpenSource/...`; stale absolute paths lingered. Cleaned up:
 
 - **Day-3 prompt template** now uses a `{{TARGET_DIR}}` placeholder (substituted
   to the real target at `prepare` time) instead of the old magic-string

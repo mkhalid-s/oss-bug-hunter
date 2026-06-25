@@ -1,6 +1,6 @@
 # OSS Bug-Hunting Agent — Research Brief & Prototype Design
 
-*Author: research brief prepared for mshaikh@guidewire.com*
+*Author: research brief prepared for maintainer@example.com*
 *Date: 2026-05-18*
 
 ---
@@ -8,7 +8,7 @@
 ## 1. TL;DR
 
 - **Worth building? Conditionally yes — but only as a private, gated "internal-first" tool, never as an autonomous upstream reporter.** The technology is real (XBOW topped HackerOne in Q2 2025; Big Sleep caught a SQLite 0-day before in-the-wild exploitation; CodeMender shipped 72 OSS patches in six months), but the public OSS contribution channel is poisoned — curl, Python, React, and Apache Airflow have all been buried by AI slop and curl shut down its bug bounty in Feb 2026.
-- **The killer risk is reputational.** If even a handful of Guidewire-attributed AI-generated reports turn out to be slop, the engineer's GitHub identity (and by extension Guidewire's) is the target of public shaming. Daniel Stenberg has stated curl will "ban and ridicule publicly." This risk dominates all the technical risks combined.
+- **The killer risk is reputational.** If even a handful of organization-attributed AI-generated reports turn out to be slop, the engineer's GitHub identity (and by extension the organization's) is the target of public shaming. Daniel Stenberg has stated curl will "ban and ridicule publicly." This risk dominates all the technical risks combined.
 - **The novel signal an agent provides is not "find bugs" — static scanners and fuzzers already do that.** The novel signal is *(a)* cross-file, hypothesis-driven exploration ("read the README and CVE history, then probe the code"), *(b)* automated exploit/PoC construction that validates the finding before a human ever sees it, and *(c)* triage-at-scale (clustering 500 stale issues, mapping deprecated J2EE APIs across an org's SBOM). Findings without a working reproducer should never leave the local report directory.
 - **The mandatory architectural pattern is the XBOW/CodeMender one: agent proposes, *non-AI validators dispose.*** Every finding must clear an executable validator (PoC runs in a container, canary is exfiltrated, failing test demonstrates the bug, patch passes the project's own test suite) before it is even surfaced to the human reviewer, and a human reviewer must sign off before anything escapes the local box. No exceptions.
 - **Start at Phase 0 with one project the user already knows deeply.** If the agent cannot produce one validated, novel finding on a project where the engineer can sanity-check it in a day, the rest of the plan is moot. Most of the value (internal risk assessment of OSS deps) is achievable in Phases 0-1 without ever talking to upstream.
@@ -84,7 +84,7 @@ This is the single most important constraint on the system design. Recent receip
 1. **Validators are non-AI.** XBOW's "validators sit outside of the AI" — a headless browser actually executes the XSS payload; a canary string is actually exfiltrated; the PoC runs in a per-job Docker container with pass/fail evidence. No finding leaves the system without a deterministic, reproducible artifact.
 2. **Canaries / planted secrets** are used as ground truth (CTF-style flags planted in admin dashboards) so the agent has to *prove* compromise, not narrate it.
 3. **Human review is mandatory before any external submission**, including for CodeMender and XBOW. This is not a stretch goal; it is the operating norm of the only AI vuln-research programs that have not been publicly shamed.
-4. **Identity hygiene** — Larson notes "new accounts with no public identity or suspiciously numerous low-quality credits" are themselves a slop signal. Any upstream activity must come from a real, attributable, high-reputation account, with each submission tied to a Guidewire engineer who personally vouches.
+4. **Identity hygiene** — Larson notes "new accounts with no public identity or suspiciously numerous low-quality credits" are themselves a slop signal. Any upstream activity must come from a real, attributable, high-reputation account, with each submission tied to a the organization engineer who personally vouches.
 5. **No private/embargoed -> public.** Real findings must follow coordinated disclosure (GHSA, security.txt, private email) and never appear in a public issue tracker until patched.
 
 ---
@@ -97,7 +97,7 @@ Honest assessment. The five categories where an agent beats Semgrep + OSS-Fuzz:
 2. **Cross-file, cross-module reasoning that exceeds CodeQL/Semgrep's dataflow.** Especially through serialization boundaries (Jackson/Kryo polymorphic types), reflection, J2EE servlet dispatch, Spring `@RequestMapping` indirection, EJB lookup-by-name. Both major SAST tools admit they break here.
 3. **Reproducer construction.** This is the lever. An agent that can write a *failing JUnit test* (Java/J2EE) or *pytest case* (Python) demonstrating the bug raises every finding from "claim" to "evidence." This alone separates real work from slop.
 4. **Triage-at-scale.** Read 500 stale issues, cluster by root cause, dedup against OSV/GHSA, surface "issues that look like silent CVEs." Pure language work — agents are good at this and humans hate it.
-5. **Architectural smell detection across an SBOM.** "Find every Guidewire dependency that still calls `ObjectInputStream.readObject` without a `ObjectInputFilter`," or "every JSP using `<%= %>` on a request param," or "every Spring app on a CVE-2022-22965-vulnerable version of Spring Core where the deployment uses Tomcat + Jakarta WAR." This is the J2EE-modernizer angle and probably the highest internal-ROI use case.
+5. **Architectural smell detection across an SBOM.** "Find every the organization dependency that still calls `ObjectInputStream.readObject` without a `ObjectInputFilter`," or "every JSP using `<%= %>` on a request param," or "every Spring app on a CVE-2022-22965-vulnerable version of Spring Core where the deployment uses Tomcat + Jakarta WAR." This is the J2EE-modernizer angle and probably the highest internal-ROI use case.
 
 **Where the agent will just regenerate Semgrep:** single-file taint, hard-coded secrets, weak crypto-config, missing security headers, `eval`/`exec` of request input. Run Semgrep first; let the agent skip these. Use SAST output as *input context*, not as the agent's output.
 
@@ -111,7 +111,7 @@ Honest assessment. The five categories where an agent beats Semgrep + OSS-Fuzz:
 flowchart TB
     subgraph TS[Target Selection]
         A1[GitHub search / GHSA / OSV] --> A4[Scorer]
-        A2[Guidewire SBOM / deps.dev] --> A4
+        A2[organization SBOM / deps.dev] --> A4
         A3[OpenSSF Scorecard] --> A4
         A4 --> A5[(Target queue)]
     end
@@ -163,7 +163,7 @@ flowchart TB
 - OSV.dev + GHSA feed (for "what's already known" — dedup and historical-CVE signal)
 - deps.dev API (popularity, dependent count)
 - OpenSSF Scorecard API (security posture — *low* scorecard score is a positive signal here, meaning unhardened target)
-- Guidewire SBOM (highest priority — direct internal risk)
+- organization SBOM (highest priority — direct internal risk)
 - "Good first issue" + "help wanted" GitHub label counts (Phase-3 contribution-pipeline mode)
 
 **Scoring features (per repo):**
@@ -172,7 +172,7 @@ flowchart TB
 - `has_security_policy`, `has_security_txt`, `accepts_vuln_reports`
 - `language_match` (Java, Python, JS/TS, J2EE markers in build files)
 - `cve_history_count` — repos with past CVEs are higher-yield
-- `internal_dependency_weight` — multiplier if in Guidewire SBOM
+- `internal_dependency_weight` — multiplier if in organization SBOM
 - `is_in_curl_python_react_blocklist` — *always 0;* never touch projects that have publicly raged against AI submissions
 
 **Output:** ranked queue with rate-limit budget per `(repo, day)`.
@@ -199,7 +199,7 @@ Run sequentially after a recon pass, then in parallel per-angle. Sub-agent roles
 - Project's own test runner (Maven/Gradle, pytest, jest) — sandboxed in Docker
 - GitHub MCP (`mcp__github__*`) for issue/PR lookup and dedup
 - Asana / Jira / Atlassian MCPs for internal ticketing
-- `jutro` and `devassistant` MCPs for Guidewire-internal context (catalog, cookbooks, embeddings)
+- internal documentation MCPs for organization-specific context (catalog, cookbooks, embeddings)
 
 ### 5.4 c) Validation Gate — the critical layer
 
@@ -221,7 +221,7 @@ Strict separation by channel and gate-state:
 | Destination | When |
 |---|---|
 | `~/oss-findings/<org>/<repo>/<date>-<finding-id>/` (markdown + reproducer + suggested-fix patch) | Always. Even rejected findings get a stub for the dedup cache. |
-| **Internal tracker** (Asana / Jira via existing MCPs) | After human sign-off, for findings affecting Guidewire's SBOM or worth tracking internally |
+| **Internal tracker** (Asana / Jira via existing MCPs) | After human sign-off, for findings affecting the organization's SBOM or worth tracking internally |
 | **Upstream GitHub** (issue or PR via `gh`/GitHub MCP) | After human sign-off **and** the finding is non-security **and** the project is not on the blocklist. PRs only for `good-first-issue`-style fixes; never large speculative refactors. |
 | **Coordinated disclosure** (GHSA, security.txt, private email) | After human sign-off, for security findings. Never a public issue for an unpatched vuln. Default embargo 90 days, extendable on request. |
 
@@ -229,7 +229,7 @@ Strict separation by channel and gate-state:
 
 ### 5.6 e) Orchestration
 
-- **Cron-driven sweeps** via the existing `schedule` skill: e.g., weekly Guidewire-SBOM sweep, monthly J2EE-modernizer sweep over the org's Java OSS deps.
+- **Cron-driven sweeps** via the existing `schedule` skill: e.g., weekly the organization-SBOM sweep, monthly J2EE-modernizer sweep over the org's Java OSS deps.
 - **Per-project queue** with rate-limit budget (GitHub API, clone bandwidth, LLM token spend).
 - **Persistence:**
   - `findings.sqlite` — dedup cache, finding history, confidence scores
@@ -266,17 +266,17 @@ Three rules that are not negotiable:
 
 ### Phase 0 — "Does it find anything real?" (1-2 weeks)
 
-- **Scope:** ONE project the user knows deeply (ideally one Guidewire already depends on, e.g., a specific Spring/Jackson/Apache Commons library; explicitly NOT curl/Python/React/Airflow).
+- **Scope:** ONE project the user knows deeply (ideally one the organization already depends on, e.g., a specific Spring/Jackson/Apache Commons library; explicitly NOT curl/Python/React/Airflow).
 - **Deliverable:** Manual-with-agent loop — the engineer runs the recon + per-angle agents from Claude Code interactively. Output is one markdown report with N candidate findings, of which each has either a reproducer or a "couldn't reproduce — dropped" note.
 - **Success criteria:** >=1 validated finding that (a) is novel (not in OSV/GHSA/issues), (b) has a working reproducer, (c) the engineer agrees would have taken them >2h to find unaided. If 0 such findings across 3 different projects, **kill the project.**
 - **Kill condition:** All findings are duplicates of Semgrep output, OR no reproducers run, OR the engineer judges every finding to be slop.
 
 ### Phase 1 — Internal Risk Assessment (3-4 weeks)
 
-- **Scope:** Scan top-N Guidewire OSS dependencies (Java + Python heavy). Internal-only output. No external submissions.
+- **Scope:** Scan top-N organization OSS dependencies (Java + Python heavy). Internal-only output. No external submissions.
 - **Deliverable:** Automated sweep producing per-dep risk reports in `~/oss-findings/`; Asana/Jira tickets created for high-confidence findings.
 - **Success criteria:** >=3 actionable internal findings that prompt remediation (dep bump, config change, or follow-up). False-positive rate <20% as judged by the reviewer.
-- **Why this first:** Zero reputational risk (nothing leaves Guidewire), highest direct ROI, exercises every component except the upstream routing.
+- **Why this first:** Zero reputational risk (nothing leaves the organization), highest direct ROI, exercises every component except the upstream routing.
 - **Kill condition:** False-positive rate >50% or zero actionable findings after 4 weeks.
 
 ### Phase 2 — Contribution Pipeline (Read-Only Triage) (4-6 weeks)
@@ -302,7 +302,7 @@ Three rules that are not negotiable:
 | GitHub ToS / rate-limit / account ban for spammy PRs | Per-project rate limits; allowlist of cooperating projects only; human signature on every PR |
 | Reputational damage from slop | Validator gate; human sign-off; AI-assistance disclosure; blocklist of unwelcoming projects |
 | Responsible-disclosure norms violated | Coordinated-disclosure-only path for security; 90-day embargo default; security.txt-respecting routing |
-| GPL ingestion -> derivative outputs | Treat OSS clones as read-only context; the agent's *output* (patches, PoCs) is treated as derivative work of that license; license-tag every output; do not commingle GPL-derived suggestions into Guidewire proprietary repos |
+| GPL ingestion -> derivative outputs | Treat OSS clones as read-only context; the agent's *output* (patches, PoCs) is treated as derivative work of that license; license-tag every output; do not commingle GPL-derived suggestions into proprietary repos |
 | Liability for false vuln claims | Validator gate + human sign-off + AI-disclosure on submissions; no upstream submission without a working reproducer |
 | Cost runaway | Per-project token budget; tiered model selection; sweep caps |
 | Canary/PoC misuse | All PoCs run in isolated Docker; target only the repo under analysis; never run PoCs against live third-party infrastructure (HackerOne-style "in-scope" rules apply only if the target is a real bounty program with explicit scope) |
@@ -311,9 +311,9 @@ Three rules that are not negotiable:
 
 ## 9. Open Questions for the User
 
-1. **Identity & attribution.** Will the engineer use their personal GitHub account or a Guidewire-branded one for any upstream activity? (Recommendation: personal + AI-disclosure note, until reputation is established.)
-2. **SBOM access.** What's the cleanest pipe to the Guidewire-wide SBOM for Phase 1? Through the dev-assistant MCPs already loaded, or via a different internal tool?
-3. **J2EE estate scope.** Is the j2ee-modernizer angle aimed at OSS deps Guidewire consumes, or at modernizing Guidewire's own legacy J2EE code (an inward-facing variant of this design)? Both are feasible from the same chassis but the routing differs.
+1. **Identity & attribution.** Will the engineer use their personal GitHub account or a organization-branded one for any upstream activity? (Recommendation: personal + AI-disclosure note, until reputation is established.)
+2. **SBOM access.** What's the cleanest pipe to the organization-wide SBOM for Phase 1? Through the internal assistant MCPs already loaded, or via a different internal tool?
+3. **J2EE estate scope.** Is the j2ee-modernizer angle aimed at OSS deps the organization consumes, or at modernizing the organization's own legacy J2EE code (an inward-facing variant of this design)? Both are feasible from the same chassis but the routing differs.
 4. **Reviewer cadence.** Who reviews — the engineer alone, a pair, or a security-team rotation? Phase 1 throughput is gated entirely by reviewer bandwidth.
 5. **Budget.** Hard monthly token/API budget for sweeps? Recommend starting at $200/mo for Phase 0-1, revisit before Phase 2.
 6. **Blocklist policy.** Auto-honor a published "no-AI-submissions" signal in security.txt / SECURITY.md? Recommend yes, and maintain a manual override-blocklist starting with curl, CPython, pip, urllib3, Requests, React, Apache Airflow.

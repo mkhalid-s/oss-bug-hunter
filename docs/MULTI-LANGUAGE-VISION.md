@@ -1,6 +1,6 @@
 # OSS Bug Hunter — Final Plan v3: Multi-Language Engine + Visual Orchestration App
 
-**Status:** v3 (hardened after 4-perspective red-team) · **Date:** 2026-06-06 · **Owner:** mshaikh@guidewire.com
+**Status:** v3 (hardened after 4-perspective red-team) · **Date:** 2026-06-06 · **Owner:** maintainer@example.com
 
 > v3 supersedes v2. It incorporates a 4-perspective red-team (portability,
 > frontend, backend/concurrency, adapter design) that scored v2 at 30/55/58/38
@@ -540,7 +540,7 @@ button in the finding detail expands the preview + a loud red/green gate.
 
 **Proof the gate works:** ec-1's preview is **blocked** for three correct, distinct
 reasons — not a keeper (failed self-consistency), `GH_TOKEN` set (enterprise pin),
-and the active account is `mshaikh_gwre` (enterprise, EMU-blocked on public repos)
+and the active account is `enterprise_account` (enterprise, EMU-blocked on public repos)
 not `mkhalid-s`. 4 tests; 195 Python tests green.
 
 **The visual app now spans the whole loop: Targets → Runs (live) → Findings board

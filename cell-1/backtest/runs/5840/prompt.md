@@ -1,7 +1,7 @@
 You are reviewing a code module for CORRECTNESS bugs (not security, not style).
 
 Working directory (already checked out at the relevant snapshot):
-  /workspaces/GW/OpenSource/oss-bug-hunter/cell-1/backtest/worktrees/5840
+  /workspaces/OpenSource/oss-bug-hunter/cell-1/backtest/worktrees/5840
 
 Files to investigate (read these in full, plus any callers/callees needed):
   - src/main/java/com/fasterxml/jackson/databind/introspect/POJOPropertiesCollector.java

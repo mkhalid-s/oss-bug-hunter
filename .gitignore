@@ -51,3 +51,18 @@ cell-1/hunt/VULN-FINDINGS-*.json
 cell-1/hunt/STOP
 # --- nested-git synthetic target (like the other *-demo; portability = follow-on) ---
 /targets/pysrc-demo/
+
+# --- OS/editor/local assistant files ---
+.DS_Store
+.claude/
+*.local.json
+
+# --- Runtime logs and process state ---
+*.log
+*.pid
+*.lock
+.tmp-pytest/
+
+# --- Local sandbox/runtime artifacts ---
+.repro-sandbox.lock
+cell-1/.pipeline.lock

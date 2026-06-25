@@ -1,6 +1,6 @@
 # Phase 0 Scope — "Does it find anything real?"
 
-**Owner:** mshaikh@guidewire.com
+**Owner:** maintainer@example.com
 **Date:** 2026-05-18
 **Duration:** 1-2 weeks (hard stop at week 2)
 **Parent:** [oss-bug-hunter-research.md](./oss-bug-hunter-research.md) §7
@@ -26,13 +26,13 @@ Hard kill condition for the whole project: 0 validated findings across 3 cells a
 |---|---|---|---|---|
 | **Jackson (databind/core)** | skip — too crowded, gadget-chain bounty arms race; will mostly regenerate CVE-2017-7525 lineage | **CELL #1 — START HERE** | limited surface (lib, not container) | backlog is small and well-managed |
 | **Spring Framework / Boot** | skip — same arms race; needs scoping to a single module first | huge surface, need to narrow to one module (e.g., spring-web HTTP parsing) | javax→jakarta migration is mostly done | backlog is huge but well-triaged |
-| **Drools / rules engine** | niche threat model — possible but novel | **CELL #2** — niche, Guidewire-strategic, scanner-undercovered | some EJB-era patterns in older modules | **CELL #4** — lowest-risk pipeline test |
+| **Drools / rules engine** | niche threat model — possible but novel | **CELL #2** — niche, the organization-strategic, scanner-undercovered | some EJB-era patterns in older modules | **CELL #4** — lowest-risk pipeline test |
 | **Apache Tomcat / Jetty** | skip — huge bounty target, under constant scrutiny | hard — concurrency bugs need fuzzing infra | **CELL #3** — config-pitfall + lifecycle smells = highest internal ROI | maintainers are noise-averse |
 
 **Why the four chosen cells, in this order:**
 
-- **Cell #1 (Jackson × correctness):** You know it (you said "all targets"). Massive historical-bug dataset → enables backtest calibration. Correctness angle sidesteps the bug-bounty arms race. Reproducer = trivial JUnit test. Guidewire definitely depends on it.
-- **Cell #2 (Drools × correctness):** Niche enough that Semgrep/CodeQL under-cover it. Strategic to Guidewire (rules engine is core IP). Run only if Cell #1 proves the loop.
+- **Cell #1 (Jackson × correctness):** You know it (you said "all targets"). Massive historical-bug dataset → enables backtest calibration. Correctness angle sidesteps the bug-bounty arms race. Reproducer = trivial JUnit test. many organizations depend on it.
+- **Cell #2 (Drools × correctness):** Niche enough that Semgrep/CodeQL under-cover it. Strategic to enterprise users (rules engine is core IP). Run only if Cell #1 proves the loop.
 - **Cell #3 (Tomcat × J2EE modernization):** Highest internal ROI per the brief — config-pitfall surface aligns with `gw:ha-check` patterns you already have.
 - **Cell #4 (Drools × issue triage):** Lowest blast radius. Tests pipeline (clone → triage → report → dedup cache) without needing the reproducer-builder. Good cell to run in parallel with #1 if you have a second day-job-free block.
 
@@ -58,7 +58,7 @@ The Phase 0 loop is interactive, not autonomous. You drive Claude Code; sub-agen
 
 **Day 1 — Recon (≈2h)**
 
-- Clone target into `/workspaces/GW/OpenSource/oss-bug-hunter/targets/jackson-databind/`
+- Clone target into `/workspaces/OpenSource/oss-bug-hunter/targets/jackson-databind/`
 - Spawn `Explore` subagent: map the deserialization pipeline, list all `JsonDeserializer` subclasses, summarize the polymorphic-type resolution flow
 - Read `CHANGELOG`, last 24mo of release notes, last 50 closed bugs labeled `bug` or `regression` — feed into the backtest dataset (§3)
 - Run Semgrep + SpotBugs + Error Prone as **context inputs**. Record their findings to a baseline file so we can later prove our findings are *not* in their output.
@@ -138,7 +138,7 @@ The brief didn't call this out, but it's the cheapest calibration we have. Build
 
 ## 4. Output routing for Phase 0
 
-**All output is local.** Nothing leaves `/workspaces/GW/OpenSource/oss-bug-hunter/cell-1/`.
+**All output is local.** Nothing leaves `/workspaces/OpenSource/oss-bug-hunter/cell-1/`.
 
 - No GitHub issues filed
 - No internal Asana/Jira tickets (Phase 1 territory)

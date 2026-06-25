@@ -1,6 +1,6 @@
 # Cell #1 Final Report — Jackson-databind x correctness
 
-**Phase:** 0  ·  **Cell:** #1  ·  **Owner:** mshaikh@guidewire.com
+**Phase:** 0  ·  **Cell:** #1  ·  **Owner:** maintainer@example.com
 
 **Generated:** $(re-run `python3 scripts/day4-finalize.py report` to refresh)
 

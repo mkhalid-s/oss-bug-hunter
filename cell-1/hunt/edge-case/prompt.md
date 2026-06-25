@@ -2,7 +2,7 @@ You are reviewing Java code in the `jackson-databind` project for CORRECTNESS
 bugs from an edge-case angle. This is a novel-hunt pass: you do not know
 which (if any) of these files contains a bug.
 
-Working directory: /workspaces/GW/OpenSource/oss-bug-hunter/targets/jackson-databind
+Working directory: /workspaces/OpenSource/oss-bug-hunter/targets/jackson-databind
 
 Files to review (read each in full, plus callers/callees as needed):
   - src/main/java/com/fasterxml/jackson/databind/deser/BeanDeserializer.java

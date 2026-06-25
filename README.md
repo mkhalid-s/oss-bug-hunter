@@ -14,7 +14,7 @@ Phase 0 of an experiment in agent-driven OSS bug hunting. **Cell #1** targets `j
 ## TL;DR
 
 ```bash
-cd /workspaces/GW/OpenSource/oss-bug-hunter
+cd /workspaces/OpenSource/oss-bug-hunter
 
 make            # advance pipeline — runs auto steps, stops at human steps with instructions
 make status     # show where you are
@@ -503,4 +503,4 @@ The final report's recommendation drives the next move:
 - **Phase 0 retry** — try a different target/angle pair with the same week-1 budget per scope §6.
 - **Kill Phase 0** — write post-mortem at `cell-1/post-mortem.md`. The loop isn't producing signal over free tools.
 
-Phase 1 (internal risk assessment across Guidewire's SBOM) only starts after Phase 0 produces at least one passing cell.
+Phase 1 (internal risk assessment across the organization's SBOM) only starts after Phase 0 produces at least one passing cell.

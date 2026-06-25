@@ -4,7 +4,7 @@ on the current code). Your job: produce a patch that makes that reproducer PASS,
 without breaking other behaviour.
 
 Target source tree (read the file under test and its collaborators):
-  /workspaces/GW/OpenSource/oss-bug-hunter/targets/jackson-databind
+  /workspaces/OpenSource/oss-bug-hunter/targets/jackson-databind
 
 The bug:
   finding id : ec-1
